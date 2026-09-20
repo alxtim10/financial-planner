@@ -48,3 +48,15 @@ model InvestmentRecommendation {
   monthlyContribution Float
   createdAt           DateTime @default(now())
 }
+
+model BudgetPlan {
+  id                     String   @id @default(cuid())
+  userId                 String? // placeholder auth (nullable)
+  presetId               String // "50/30/20" | "70/20/10" | "80/20"
+  baseAmount             Float
+  mode                   String // "terpisah" | "kombinasi"
+  manualSavingsTarget    Float?
+  investmentContribution Float? // snapshot monthlyContribution (kombinasi)
+  breakdown              Json // BudgetLine[] hasil computeBudget
+  createdAt              DateTime @default(now())
+}

@@ -1,0 +1,232 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Migrasi Prisma: tambah model `BudgetPlan`": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928733073
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928740980
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928895942
+      }
+    ],
+    "2. Definisikan tipe domain Planner": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928733100
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928741742
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928897081
+      }
+    ],
+    "3.1 Implementasikan `lib/planner/presets.ts`: konstanta `BUDGET_PRESETS` (3 preset: 50/30/20, 70/20/10, 80/20 dengan kategori & `isSavings`) dan `getPreset(id)` yang melempar error untuk id tidak dikenal.": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928733164
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928904691
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928990642
+      }
+    ],
+    "3.2 Implementasikan `lib/planner/budget.ts`: `computeBudget(baseAmount, presetId)` (amount = baseAmount×pct/100, guard input tidak valid), `savingsBucketAmount(breakdown)`, dan `evaluateShortfall(savingsBucketAmount, investmentContribution)`.": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928733187
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928997812
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929084644
+      }
+    ],
+    "4.1 Implementasikan `app/api/budget/route.ts` GET: `getLatestProfile()` → `defaultBaseAmount = income`, ambil `BudgetPlan` terbaru; `runtime = \"nodejs\"`.": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928733207
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929093813
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929218726
+      }
+    ],
+    "4.2 Implementasikan `app/api/budget/route.ts` POST: validasi (preset, baseAmount≥0, mode, manualSavingsTarget≥0 → 400), `computeBudget` + `savingsBucketAmount`, mode `kombinasi` tarik `monthlyContribution` dari `InvestmentRecommendation` terbaru (0 bila tak ada), `evaluateShortfall`, persist `BudgetPlan` (snapshot investmentContribution), error DB → 500 ramah.": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928733231
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929095924
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929221057
+      }
+    ],
+    "5. Checkpoint — pastikan logika & API hijau": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928733254
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929231110
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929295991
+      }
+    ],
+    "6.1 Buat `components/planner/PresetPicker.tsx` (pilih 1 dari 3 preset, tampil persentase per kategori, token `--accent`) dan `components/planner/BudgetForm.tsx` (Base_Amount prefilled + timpa, pemilih Savings_Mode, Manual_Savings_Target opsional, tampil investmentContribution di kombinasi).": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928733305
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929308088
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929469009
+      }
+    ],
+    "6.2 Buat `components/planner/BudgetResultCard.tsx` mengikuti pola visual `RecommendationCard`: bar proporsi, rincian per pos (Rupiah `Rp ${Math.round(v).toLocaleString(\"id-ID\")}`), peringatan shortfall, disclaimer edukatif.": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928733332
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929309723
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929470942
+      }
+    ],
+    "6.3 Buat `components/planner/PlannerWizard.tsx` (client) yang merangkai PresetPicker → BudgetForm → BudgetResultCard dan wire ke `GET`/`POST /api/budget`; buat `app/planner/page.tsx` (server component) dibungkus `ProfileGate` (reuse) dengan `dynamic = \"force-dynamic\"`.": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928733355
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929479907
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929640472
+      }
+    ],
+    "7.1 Ubah `app/page.tsx` (minimal) untuk menambahkan tautan/kartu menuju `/planner`.": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928733377
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929481145
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929641401
+      }
+    ],
+    "8. Checkpoint akhir — pastikan build & test hijau": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789928733397
+      },
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929649494
+      }
+    ],
+    "3. Modul preset & perhitungan anggaran (TDD)": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929084705
+      }
+    ],
+    "4. API route `/api/budget` (POST hitung+simpan, GET konteks awal)": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929221116
+      }
+    ],
+    "6. UI Planner end-to-end (gated) + hasil": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929640531
+      }
+    ],
+    "7. Integrasi dashboard": [
+      {
+        "executionId": "033feb25-e213-4d73-b195-921479ddda07",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789929641424
+      }
+    ]
+  }
+}

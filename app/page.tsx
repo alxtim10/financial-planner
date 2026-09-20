@@ -3,6 +3,7 @@ import {
   ArrowRight,
   LineChart,
   MessageCircle,
+  PieChart,
   PiggyBank,
   Sparkles,
   TrendingDown,
@@ -158,7 +159,7 @@ export default async function Home() {
         {/* ── Kartu navigasi ──────────────────────────────────── */}
         <section aria-label="Navigasi" className="mb-8">
           <h2 className="mb-3 text-sm font-medium text-muted">Jelajahi</h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Link
               href="/profile"
               className="group flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 transition-colors hover:bg-surface-hover"
@@ -193,6 +194,25 @@ export default async function Home() {
                 <p className="text-sm leading-relaxed text-muted">
                   Tetapkan tujuan, isi survei risiko, dan dapatkan rekomendasi
                   alokasi.
+                </p>
+              </div>
+            </Link>
+
+            <Link
+              href="/planner"
+              className="group flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 transition-colors hover:bg-surface-hover"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-[var(--accent)]">
+                <PieChart className="h-5 w-5" />
+              </span>
+              <div className="flex flex-col gap-1">
+                <h3 className="flex items-center gap-1.5 text-[0.9375rem] font-semibold text-foreground">
+                  Anggaran
+                  <ArrowRight className="h-3.5 w-3.5 text-muted transition-transform group-hover:translate-x-0.5" />
+                </h3>
+                <p className="text-sm leading-relaxed text-muted">
+                  Bagi pemasukan ke pos kebutuhan, keinginan, dan tabungan
+                  berdasarkan metode preset.
                 </p>
               </div>
             </Link>
