@@ -1,3 +1,5 @@
+> **Catatan arah produk:** Dokumen ini mendeskripsikan tugas implementasi **fitur chatbot pelengkap (complementary)** dari fase PoC. Arah produk keseluruhan kini adalah aplikasi perencana keuangan terstruktur (fokus MVP: cakupan Investasi); rencana implementasi terbaru ada di `.kiro/specs/financial-planner/tasks.md`. Lihat [`dokumentasi.md`](./dokumentasi.md) untuk arah dan gambaran keseluruhan yang otoritatif.
+
 # Implementation Tasks Breakdown
 
 ## Phase 1: Inisialisasi Proyek & Konfigurasi Lingkungan

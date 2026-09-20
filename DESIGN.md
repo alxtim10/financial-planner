@@ -1,3 +1,5 @@
+> **Catatan arah produk:** Dokumen ini mendeskripsikan desain **fitur chatbot pelengkap (complementary)** dari fase PoC dan tetap berlaku untuk chatbot. Arah produk keseluruhan kini adalah aplikasi perencana keuangan terstruktur (fokus MVP: cakupan Investasi). Lihat [`dokumentasi.md`](./dokumentasi.md) untuk arah dan gambaran keseluruhan yang otoritatif.
+
 # System Design & Architecture
 
 ## 1. Folder Structure

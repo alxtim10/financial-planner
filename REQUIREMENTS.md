@@ -1,3 +1,5 @@
+> **Catatan arah produk:** Dokumen ini mendeskripsikan kebutuhan **fitur chatbot pelengkap (complementary)** dari fase PoC. Arah produk keseluruhan kini adalah aplikasi perencana keuangan terstruktur (fokus MVP: cakupan Investasi). Lihat [`dokumentasi.md`](./dokumentasi.md) untuk arah dan gambaran keseluruhan yang otoritatif.
+
 # Acceptance Criteria & Requirements
 
 ## Functional Acceptance Criteria (Gherkin Scenarios)

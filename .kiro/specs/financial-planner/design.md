@@ -2,12 +2,14 @@
 
 ## Overview
 
-Financial Planner AI adalah aplikasi Next.js (App Router) single-page dengan satu endpoint API proxy. Klien mengelola state percakapan in-memory dan menampilkan balasan streaming; server menyisipkan system instruction, memetakan riwayat ke format Gemini, memanggil Gemini API secara streaming, lalu meneruskan potongan teks kembali ke klien.
+Financial Planner adalah aplikasi Next.js (App Router) yang bergeser dari PoC chatbot menjadi **aplikasi perencana keuangan terstruktur**. Fitur utama MVP adalah **cakupan Investasi**: alur berpandu dari Profil Finansial → Goal → Survei Risiko → Rekomendasi Alokasi + Proyeksi Kontribusi Bulanan. Chatbot yang sudah ada tetap dipertahankan sebagai **fitur pelengkap** dan dikemas ulang menjadi panel drawer geser dari kanan.
 
 Prinsip desain utama:
-- **API key terisolasi di server.** Semua panggilan ke Gemini hanya dari route handler.
-- **Kontrak UI sederhana.** Klien memakai format history flat `{ role, content }`; pemetaan ke format native Gemini terjadi di server sehingga UI tidak bergantung pada detail SDK.
-- **Streaming teks polos.** Menghindari kompleksitas SSE; server mengembalikan `ReadableStream` teks yang dibaca klien via `Response.body`.
+- **Financial_Profile sebagai model data terpusat.** Profil finansial menjadi sumber kebenaran kondisi keuangan pengguna dan gate wajib sebelum Investment_Scope. Fitur lanjutan (Planner, integrasi Chatbot) akan membaca profil ini.
+- **Logika investasi murni (pure) dan terisolasi.** Mesin aturan alokasi, kalkulator kontribusi bulanan, dan skoring risiko ditulis sebagai pure function di `lib/investment/` — deterministik, mudah diuji, dan dapat dipakai ulang oleh roadmap.
+- **Rule-based, bukan AI, untuk angka.** Rekomendasi investasi dihitung deterministik dari matriks aturan dan rumus keuangan, bukan dari LLM. Chatbot AI hanya untuk konsultasi naratif.
+- **Chatbot tak tersentuh secara logika.** Kontrak `POST /api/chat`, `lib/prompt.ts`, dan `types/chat.ts` tetap. Hanya pengemasan UI yang berubah.
+- **Persistensi via PostgreSQL + Prisma** dengan `userId` placeholder untuk auth masa depan.
 
 Design ini memenuhi Requirements 1–9.
 
@@ -15,256 +17,386 @@ Design ini memenuhi Requirements 1–9.
 
 ### Diagram Konteks
 
+```mermaid
+flowchart TD
+    U[Pengguna / Browser] -->|isi profil| PF[app/profile]
+    U -->|Goal + Survei Risiko| INV[app/investment]
+    U -->|buka drawer| CD[ChatDrawer]
+
+    PF -->|POST/GET| APIp[/api/profile/]
+    INV -->|POST/GET| APIg[/api/goal/]
+    INV -->|POST| APIr[/api/recommendation/]
+    CD -->|POST| APIc[/api/chat/]
+
+    APIp --> DB[(PostgreSQL via Prisma)]
+    APIg --> DB
+    APIr --> RE[lib/investment/allocation]
+    APIr --> PR[lib/investment/projection]
+    APIr --> RS[lib/investment/riskScoring]
+    APIr --> DB
+
+    APIc --> GEM[Gemini API - streaming]
+
+    Gate{{Profile Gate}} -.blokir tanpa profil.-> INV
 ```
-[Browser / ChatInterface]
-   | POST /api/chat  { message, history: {role, content}[] }
-   v
-[Next.js Route Handler /api/chat]  (runtime = "nodejs")
-   | map -> { role, parts:[{text}] } + systemInstruction
-   v
-[Gemini API]  model: gemini-2.5-flash, temperature: 0.4, stream
-   | text chunks
-   v
-[Route Handler]  ReadableStream<string>
-   | streamed body
-   v
-[ChatInterface]  reader.read() -> append -> react-markdown render
+
+### Alur Data Investasi (Investment Scope)
+
+```mermaid
+sequenceDiagram
+    participant U as Pengguna
+    participant Prof as app/profile
+    participant Inv as app/investment
+    participant Api as /api/recommendation
+    participant Eng as lib/investment
+    participant DB as PostgreSQL
+
+    U->>Prof: Isi income, expense, savings
+    Prof->>DB: POST /api/profile (simpan FinancialProfile)
+    U->>Inv: Set Goal (target, tahun) + isi survei risiko
+    Inv->>DB: POST /api/goal (simpan Goal)
+    Inv->>Api: POST /api/recommendation (goal + jawaban survei)
+    Api->>Eng: riskScoring(jawaban) -> Risk_Profile
+    Api->>Eng: getAllocation(horizon, riskProfile) -> komposisi + return
+    Api->>Eng: calculateMonthlyContribution(FV, PV, i, n) -> kontribusi
+    Api->>DB: simpan InvestmentRecommendation
+    Api-->>Inv: RecommendationCard payload
+    Inv-->>U: Tampilkan komposisi + return + kontribusi + disclaimer
 ```
 
 ### Struktur Folder
 
+Penambahan ditandai `# BARU`. Berkas chatbot yang ada tetap.
+
 ```text
 /
 ├── app/
-│   ├── api/chat/route.ts   # API proxy (Node.js runtime, streaming)
-│   ├── layout.tsx          # Root layout
-│   ├── page.tsx            # Halaman utama (mount ChatInterface)
-│   └── globals.css         # Tailwind base
+│   ├── api/
+│   │   ├── chat/route.ts          # Chatbot proxy (TETAP, tidak berubah)
+│   │   ├── profile/route.ts       # BARU: POST/GET FinancialProfile
+│   │   ├── goal/route.ts          # BARU: POST/GET Goal
+│   │   └── recommendation/route.ts# BARU: POST hitung + simpan rekomendasi
+│   ├── layout.tsx                 # DIUBAH: mount ChatDrawer + toggle kanan-atas
+│   ├── page.tsx                   # DIUBAH: dashboard (link ke Profile & Investment)
+│   ├── profile/page.tsx           # BARU: onboarding Financial Profile
+│   ├── investment/page.tsx        # BARU: Goal -> Survei -> Rekomendasi
+│   └── globals.css                # Tailwind base (tetap)
 ├── components/
-│   ├── ChatInterface.tsx   # State percakapan, stream reader, quick prompts, auto-scroll
-│   └── MessageBubble.tsx   # Render satu pesan (Markdown untuk role model)
+│   ├── ChatInterface.tsx          # TETAP (dibungkus oleh ChatDrawer)
+│   ├── MessageBubble.tsx          # TETAP
+│   ├── ChatDrawer.tsx             # BARU: pembungkus drawer + state buka/tutup
+│   ├── profile/
+│   │   └── ProfileForm.tsx        # BARU
+│   └── investment/
+│       ├── GoalForm.tsx           # BARU
+│       ├── RiskSurvey.tsx         # BARU
+│       └── RecommendationCard.tsx # BARU
 ├── lib/
-│   └── prompt.ts           # FINANCIAL_PLANNER_PROMPT (system instruction)
+│   ├── prompt.ts                  # TETAP (system instruction chatbot)
+│   ├── db.ts                      # BARU: Prisma Client singleton
+│   └── investment/
+│       ├── allocation.ts          # BARU: getAllocation (pure)
+│       ├── projection.ts          # BARU: calculateMonthlyContribution (pure)
+│       └── riskScoring.ts         # BARU: scoreRisk (pure)
 ├── types/
-│   └── chat.ts             # Tipe Message { role, content }
-├── .env.local              # GEMINI_API_KEY (gitignored)
+│   ├── chat.ts                    # TETAP
+│   └── finance.ts                 # BARU: tipe domain investasi
+├── prisma/
+│   └── schema.prisma              # BARU: model + datasource
+├── .env.local                    # GEMINI_API_KEY, DATABASE_URL
 └── package.json
 ```
 
 ## Components and Interfaces
 
-### Tipe Bersama (`types/chat.ts`)
+### Tipe Domain (`types/finance.ts`)
 
 ```ts
-export type Role = "user" | "model";
+export type RiskProfile = "Konservatif" | "Moderat" | "Agresif";
 
-export interface Message {
-  role: Role;
-  content: string;
+// Bucket horizon hasil klasifikasi tahun.
+export type HorizonBucket = "<2" | "2-5" | ">5";
+
+export interface AllocationSlice {
+  instrument: string; // mis. "RDPU", "SBN/Deposito", "Saham/Indeks"
+  percentage: number; // 0..100
 }
 
-export interface ChatRequest {
-  message: string;
-  history: Message[];
+export interface Allocation {
+  composition: AllocationSlice[]; // total percentage = 100
+  annualReturn: number;           // desimal, mis. 0.055 untuk 5.5%
 }
-```
 
-Catatan: `role` dibatasi ke `"user" | "model"` (Req 8.4). Tidak pernah `"assistant"`.
+export interface Goal {
+  targetAmount: number; // FV
+  horizonYears: number;
+}
 
-### API Contract: `POST /api/chat`
-
-**Request**
-- Header: `Content-Type: application/json`
-- Body:
-  ```json
-  {
-    "message": "Gaji saya 8 juta, cicilan motor 1.5 juta.",
-    "history": [
-      { "role": "user", "content": "Halo" },
-      { "role": "model", "content": "Halo! Saya asisten keuangan Anda..." }
-    ]
-  }
-  ```
-
-**Response (sukses)**
-- Status: `200`
-- Header: `Content-Type: text/plain; charset=utf-8`
-- Body: aliran teks Markdown polos (token demi token). Tanpa pembungkus JSON.
-
-**Response (error sebelum stream)** — Req 7.1
-- Status: `500` (atau `429` jika rate limit terdeteksi)
-- Body JSON: `{ "error": "Maaf, gagal memulai sesi. Coba lagi sebentar." }`
-
-### Protokol Streaming & Error Mid-Stream
-
-Karena badan sukses berupa teks polos, error yang terjadi **setelah** stream dimulai tidak bisa lagi mengubah status HTTP. Untuk itu (Req 7.2):
-
-- Server membungkus iterasi chunk dalam `try/catch`. Bila terjadi error di tengah, server menuliskan penanda sentinel di akhir stream:
-  ```
-  \n\n[[STREAM_ERROR]]
-  ```
-- Klien memeriksa apakah teks terakumulasi diakhiri sentinel `[[STREAM_ERROR]]`. Jika ya: hapus sentinel dari tampilan, tandai pesan gagal, hentikan loading, dan tampilkan catatan error singkat.
-
-Ini membuat kegagalan mid-stream dapat dideteksi dan diuji secara deterministik (menyempurnakan Scenario 4 yang sebelumnya kabur).
-
-### Server: Route Handler (`app/api/chat/route.ts`)
-
-Tanggung jawab:
-- `export const runtime = "nodejs";` (Req 6, stabilitas SDK + streaming).
-- Validasi body minimal (`message` non-kosong; `history` array).
-- Potong history ke **20 pesan terakhir** (Req 8.2) — pemotongan ganda (klien + server) sebagai jaring pengaman.
-- Petakan `{ role, content }` → `{ role, parts: [{ text: content }] }`.
-- Panggil `ai.models.generateContentStream` dengan `model: "gemini-2.5-flash"`, `config.systemInstruction`, `config.temperature = 0.4`.
-- Kembalikan `ReadableStream` yang meng-enqueue `chunk.text` sebagai UTF-8.
-
-Sketsa:
-
-```ts
-import { GoogleGenAI } from "@google/genai";
-import { NextResponse } from "next/server";
-import { FINANCIAL_PLANNER_PROMPT } from "@/lib/prompt";
-import type { ChatRequest } from "@/types/chat";
-
-export const runtime = "nodejs";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-
-export async function POST(req: Request) {
-  let body: ChatRequest;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Permintaan tidak valid." }, { status: 400 });
-  }
-
-  const { message, history = [] } = body;
-  if (!message?.trim()) {
-    return NextResponse.json({ error: "Pesan kosong." }, { status: 400 });
-  }
-
-  const trimmed = history.slice(-20);
-  const contents = [
-    ...trimmed.map((m) => ({ role: m.role, parts: [{ text: m.content }] })),
-    { role: "user", parts: [{ text: message }] },
-  ];
-
-  let geminiStream;
-  try {
-    geminiStream = await ai.models.generateContentStream({
-      model: "gemini-2.5-flash",
-      contents,
-      config: { systemInstruction: FINANCIAL_PLANNER_PROMPT, temperature: 0.4 },
-    });
-  } catch (err) {
-    console.error("Gemini init error:", err);
-    return NextResponse.json(
-      { error: "Maaf, gagal memulai sesi. Coba lagi sebentar." },
-      { status: 500 }
-    );
-  }
-
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        for await (const chunk of geminiStream) {
-          const text = chunk.text;
-          if (text) controller.enqueue(encoder.encode(text));
-        }
-      } catch (err) {
-        console.error("Gemini stream error:", err);
-        controller.enqueue(encoder.encode("\n\n[[STREAM_ERROR]]"));
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-  });
+export interface ProjectionInput {
+  futureValue: number;   // FV = target
+  presentValue: number;  // PV = tabungan saat ini
+  annualReturn: number;  // desimal
+  horizonYears: number;
 }
 ```
 
-### Server: System Prompt (`lib/prompt.ts`)
+### Modul Logika Investasi (`lib/investment/`)
 
-`FINANCIAL_PLANNER_PROMPT` mengarahkan model untuk (memenuhi Req 3 & 4):
-- Meminta 3 data inti (pemasukan, pengeluaran/cicilan, tujuan) bila belum lengkap; jangan mengarang nominal.
-- Memakai acuan alokasi 50/30/20 dan memprioritaskan dana darurat sebelum investasi berisiko.
-- Menyertakan angka kalkulasi yang akurat bila nominal diberikan.
-- Selalu menutup ringkasan dengan disclaimer edukatif.
-- Menjawab dalam Bahasa Indonesia dengan format Markdown (tabel/bullet bila relevan).
+Semua fungsi **pure** — tanpa I/O, tanpa dependensi UI/DB.
 
-### Klien: `ChatInterface.tsx`
-
-State:
+**`allocation.ts`**
 ```ts
-const [messages, setMessages] = useState<Message[]>([]);
-const [input, setInput] = useState("");
-const [isGenerating, setIsGenerating] = useState(false);
+export function bucketHorizon(horizonYears: number): HorizonBucket;
+// getAllocation memetakan (horizon, riskProfile) -> Allocation via Allocation_Matrix.
+// Untuk bucket "<2", riskProfile diabaikan.
+export function getAllocation(horizonYears: number, riskProfile: RiskProfile): Allocation;
 ```
 
-Alur `handleSend(text)`:
-1. Guard: abaikan bila `isGenerating` atau teks kosong.
-2. Tambah pesan user ke `messages`; set `isGenerating = true`.
-3. Tambah bubble `model` kosong sebagai placeholder streaming.
-4. `fetch("/api/chat", { method:"POST", body: JSON.stringify({ message: text, history: messages.slice(-20) }) })`.
-5. Jika `!res.ok`: baca JSON error, tampilkan di bubble model, hentikan.
-6. Baca `res.body!.getReader()` + `TextDecoder`; loop `read()`, append tiap chunk ke bubble model terakhir (Req 2.2).
-7. Deteksi sentinel `[[STREAM_ERROR]]` di akhir (Req 7.2): bersihkan + tandai error.
-8. `finally`: `isGenerating = false`.
+**`projection.ts`**
+```ts
+// Future Value of Annuity:
+//   PMT = (FV - PV*(1+i)^n) * i / ((1+i)^n - 1)
+//   i = annualReturn/12, n = horizonYears*12
+// Fallback linear (FV - PV)/n saat i = 0. Hasil dibatasi minimum 0.
+export function calculateMonthlyContribution(input: ProjectionInput): number;
+```
 
-Auto-scroll (Req 2.3): `useRef` ke elemen sentinel di dasar list; `useEffect` memanggil `scrollIntoView` saat `messages` berubah.
+**`riskScoring.ts`**
+```ts
+// Menjumlahkan bobot jawaban survei lalu klasifikasi via ambang batas tetap.
+export function scoreRisk(answers: number[]): { score: number; profile: RiskProfile };
+```
 
-Quick prompts (Req 5): array preset dirender sebagai tombol; klik memanggil `handleSend(preset)`.
+### API Contracts (BARU)
 
-Layout (Req 9.3): seluruh konten (list pesan + input) dibungkus container `mx-auto w-full max-w-3xl px-4`. Di desktop container mentok ~768px dan berada di tengah; di mobile mengisi penuh dengan padding tepi. Contoh kerangka:
+**`POST /api/profile`** — simpan Financial_Profile
+- Body: `{ income: number, expense: number, currentSavings: number, userId?: string | null }`
+- Validasi: ketiganya `>= 0`. Invalid → HTTP 400 `{ error }`.
+- Sukses → HTTP 201 `{ id, income, expense, currentSavings }`.
 
+**`GET /api/profile`** — ambil profil terakhir (untuk gate)
+- Sukses → HTTP 200 `{ profile: FinancialProfile | null }`.
+
+**`POST /api/goal`** — simpan Goal
+- Body: `{ targetAmount: number, horizonYears: number, userId?: string | null }`
+- Validasi: `targetAmount > 0`, `horizonYears > 0`. Invalid → HTTP 400.
+- Sukses → HTTP 201 `{ id, targetAmount, horizonYears }`.
+
+**`GET /api/goal`** — ambil goal terakhir.
+
+**`POST /api/recommendation`** — hitung + simpan rekomendasi
+- Body: `{ goalId?: string, targetAmount: number, horizonYears: number, riskAnswers: number[], currentSavings: number, userId?: string | null }`
+- Alur server: `scoreRisk(riskAnswers)` → `getAllocation(horizonYears, profile)` → `calculateMonthlyContribution(...)` → simpan `RiskAssessment` + `InvestmentRecommendation`.
+- Sukses → HTTP 200 `{ riskProfile, composition, annualReturn, monthlyContribution }`.
+- Error DB/logika → HTTP 500 `{ error }` ramah pengguna.
+
+### Chatbot Drawer (`components/ChatDrawer.tsx` + `app/layout.tsx`)
+
+- `ChatDrawer` membungkus `ChatInterface` yang sudah ada (tanpa mengubah logikanya).
+- State buka/tutup dikelola oleh client wrapper (React context atau state lokal di komponen client yang di-mount di layout).
+- Tombol ikon (lucide-react, mis. `MessageCircle`) di sudut kanan atas, tersedia di semua halaman karena di-mount di `app/layout.tsx`.
+- Panel: `fixed inset-y-0 right-0`, lebar `w-full max-w-md`, transisi `translate-x` (`translate-x-full` saat tertutup → `translate-x-0` saat terbuka).
+- Backdrop semi-transparan menutupi konten; klik backdrop menutup drawer.
+- Tutup via: tombol X, klik backdrop, atau tombol Escape (listener `keydown`).
+- A11y: `role="dialog"`, `aria-modal="true"`, `aria-label`, fokus dipindah ke drawer saat terbuka.
+- `POST /api/chat` dan seluruh perilaku streaming/sentinel tidak berubah.
+
+Kerangka:
 ```tsx
-<div className="flex h-dvh flex-col">
-  <header className="mx-auto w-full max-w-3xl px-4">...</header>
-  <main className="flex-1 overflow-y-auto">
-    <div className="mx-auto w-full max-w-3xl px-4">{/* messages */}</div>
-  </main>
-  <footer className="mx-auto w-full max-w-3xl px-4">{/* input + quick prompts */}</footer>
-</div>
+<>
+  <button aria-label="Buka asisten AI" onClick={open} className="fixed right-4 top-4 z-40">
+    <MessageCircle />
+  </button>
+  {isOpen && <div className="fixed inset-0 z-40 bg-black/40" onClick={close} />}
+  <aside
+    role="dialog" aria-modal="true" aria-label="Asisten AI"
+    className={`fixed inset-y-0 right-0 z-50 w-full max-w-md transform transition-transform ${isOpen ? "translate-x-0" : "translate-x-full"}`}
+  >
+    <button aria-label="Tutup" onClick={close}><X /></button>
+    <ChatInterface />
+  </aside>
+</>
 ```
 
-### Klien: `MessageBubble.tsx`
-- Prop: `message: Message`.
-- `role === "user"`: bubble align kanan, teks polos, lebar dibatasi `max-w-[80%]` (Req 9.4).
-- `role === "model"`: bubble align kiri, render via `react-markdown` + `remark-gfm` (Req 1.3), lebar dibatasi `max-w-[80%]` (Req 9.4).
+### Dashboard & Halaman
+
+- `app/page.tsx`: dashboard ringkas dengan tautan ke `/profile` dan `/investment` serta ringkasan status profil.
+- `app/profile/page.tsx`: `ProfileForm` untuk income/expense/savings.
+- `app/investment/page.tsx`: alur bertahap `GoalForm` → `RiskSurvey` → `RecommendationCard`. Dilindungi Profile_Gate: bila `GET /api/profile` mengembalikan `null`, redirect ke `/profile`.
 
 ## Data Models
 
-Hanya satu model inti (`Message`) seperti di atas. Tidak ada persistensi (Req 8.3): state hidup di memori komponen React dan hilang saat refresh.
+### Prisma Schema (`prisma/schema.prisma`)
+
+```prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model FinancialProfile {
+  id             String   @id @default(cuid())
+  userId         String?  // placeholder auth (nullable di MVP)
+  income         Float
+  expense        Float
+  currentSavings Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Goal {
+  id           String   @id @default(cuid())
+  userId       String?
+  targetAmount Float
+  horizonYears Int
+  createdAt    DateTime @default(now())
+}
+
+model RiskAssessment {
+  id        String   @id @default(cuid())
+  userId    String?
+  answers   Int[]    // jawaban survei mentah
+  score     Int
+  profile   String   // "Konservatif" | "Moderat" | "Agresif"
+  createdAt DateTime @default(now())
+}
+
+model InvestmentRecommendation {
+  id                 String   @id @default(cuid())
+  userId             String?
+  goalId             String?
+  riskProfile        String
+  composition        Json     // AllocationSlice[]
+  annualReturn       Float
+  monthlyContribution Float
+  createdAt          DateTime @default(now())
+}
+```
+
+Catatan:
+- `DATABASE_URL` = `postgresql://alxtim@localhost:5432/financial_planner` (user `alxtim`, tanpa password). Database `financial_planner` dibuat saat eksekusi (createdb/psql), tabel dikelola `prisma migrate`.
+- `composition` disimpan sebagai `Json` agar fleksibel terhadap variasi jumlah instrumen per sel matriks.
+
+### Allocation Matrix (inti Allocation_Engine)
+
+| Horizon | Risk Profile | Komposisi | Est. Return Tahunan |
+|---|---|---|---|
+| < 2 Tahun | Semua | 100% RDPU | 4,75% |
+| 2–5 Tahun | Konservatif | 70% RDPU + 30% SBN/Deposito | 5,5% |
+| 2–5 Tahun | Moderat | 50% RDPU + 50% Emas/SBN Ritel | 6,5% |
+| 2–5 Tahun | Agresif | 30% RDPU + 40% SBN/RDPT + 30% Emas | 7,5% |
+| > 5 Tahun | Konservatif | 50% SBN/RDPT + 30% Emas + 20% Saham | 7,0% |
+| > 5 Tahun | Moderat | 40% Saham/Indeks + 40% SBN + 20% Emas | 9,5% |
+| > 5 Tahun | Agresif | 70% Saham/Indeks + 20% SBN + 10% Emas | 11,0% |
+
+Aturan bucket: `horizonYears < 2` → `<2` (abaikan Risk_Profile); `2 <= horizonYears <= 5` → `2-5`; `horizonYears > 5` → `>5`.
+
+### Rumus Kontribusi Bulanan (Future Value of Annuity)
+
+```
+PMT = (FV - PV*(1+i)^n) * i / ((1+i)^n - 1)
+i = annualReturn / 12
+n = horizonYears * 12
+```
+Fallback linear `(FV - PV) / n` saat `i = 0`. Hasil dibatasi minimum `0`.
+
+## Correctness Properties
+
+*A property is a characteristic or behavior that should hold true across all valid executions of a system — essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
+
+Bagian ini berlaku untuk logika murni di `lib/investment/` (allocation, projection, riskScoring) yang merupakan pure function dengan ruang input besar — sangat cocok untuk property-based testing. Lapisan UI, API wiring, dan persistensi PostgreSQL diuji dengan example-based/integration test (lihat Testing Strategy), bukan properti.
+
+### Property 1: Komposisi alokasi selalu berjumlah 100%
+
+*For any* horizon tahun yang valid dan Risk_Profile yang valid, komposisi alokasi yang dikembalikan `getAllocation` SHALL memiliki total persentase tepat 100%.
+
+**Validates: Requirements 4.10**
+
+### Property 2: Horizon dan Risk_Profile terpetakan sesuai matriks
+
+*For any* pasangan (horizonYears, riskProfile) yang valid, `getAllocation` SHALL mengembalikan komposisi dan estimasi return tahunan yang tepat sama dengan sel Allocation_Matrix untuk bucket horizon dan Risk_Profile tersebut.
+
+**Validates: Requirements 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8**
+
+### Property 3: Horizon pendek mengabaikan Risk_Profile
+
+*For any* horizonYears kurang dari 2, `getAllocation` SHALL mengembalikan hasil yang identik (100% RDPU, return 4,75%) untuk semua nilai Risk_Profile.
+
+**Validates: Requirements 4.2**
+
+### Property 4: Klasifikasi bucket horizon konsisten di batas
+
+*For any* horizonYears, `bucketHorizon` SHALL memetakan nilai < 2 ke `<2`, nilai dalam rentang [2, 5] ke `2-5`, dan nilai > 5 ke `>5`, termasuk tepat pada batas 2 dan 5.
+
+**Validates: Requirements 2.2, 4.2, 4.3, 4.6**
+
+### Property 5: Risk_Profile hasil skoring selalu valid
+
+*For any* rangkaian jawaban survei yang valid, `scoreRisk` SHALL mengembalikan Risk_Profile yang merupakan salah satu dari `Konservatif`, `Moderat`, atau `Agresif`, dan pemetaan skor→profil bersifat monoton (skor lebih tinggi tidak menghasilkan profil yang lebih konservatif).
+
+**Validates: Requirements 3.2, 3.3**
+
+### Property 6: Kontribusi bulanan mencapai target (round-trip finansial)
+
+*For any* input proyeksi valid dengan `annualReturn > 0`, menaruh `calculateMonthlyContribution` sebagai anuitas selama `n` bulan dengan bunga `i` ditambah pertumbuhan `PV` SHALL menghasilkan future value yang sama dengan `targetAmount` dalam toleransi numerik kecil.
+
+**Validates: Requirements 5.1, 5.2**
+
+### Property 7: Fallback linear saat return nol
+
+*For any* input proyeksi dengan `annualReturn = 0` dan `targetAmount >= presentValue`, `calculateMonthlyContribution` SHALL sama dengan `(targetAmount - presentValue) / (horizonYears*12)`.
+
+**Validates: Requirements 5.3**
+
+### Property 8: Kontribusi bulanan tidak pernah negatif
+
+*For any* input proyeksi valid, `calculateMonthlyContribution` SHALL mengembalikan nilai lebih besar dari atau sama dengan 0, termasuk saat `presentValue` sudah cukup untuk mencapai target.
+
+**Validates: Requirements 5.4**
+
+### Property 9: Input tidak valid ditolak
+
+*For any* Risk_Profile di luar himpunan `{Konservatif, Moderat, Agresif}` atau horizon non-positif, `getAllocation` SHALL menandai input sebagai tidak valid (melempar error), alih-alih mengembalikan komposisi.
+
+**Validates: Requirements 4.9**
 
 ## Error Handling
 
 | Kondisi | Deteksi | Respons | Req |
 |---|---|---|---|
-| Body tidak valid / pesan kosong | Validasi server | HTTP 400 + JSON error | 7 |
-| Gagal inisiasi Gemini | `try/catch` sebelum stream | HTTP 500/429 + JSON error, UI tampilkan di chat | 7.1 |
-| Gagal di tengah stream | `try/catch` dalam `start()` | Sentinel `[[STREAM_ERROR]]`, UI hentikan loading + tandai | 7.2 |
-| API key tidak diset | `process.env` undefined | Log server; inisiasi gagal → jalur 7.1 | 6 |
-
-Semua jalur error mengembalikan kontrol input ke pengguna (Req 7.3).
+| Profil belum ada saat akses Investment | Profile_Gate cek `GET /api/profile` | Redirect ke `/profile` | 1.3 |
+| Input profil/goal negatif atau non-positif | Validasi API | HTTP 400 + JSON error | 1.2, 2.3, 2.4 |
+| Risk_Profile/horizon tidak valid di engine | Guard di `getAllocation` | Lempar error → API kembalikan HTTP 400/500 | 4.9 |
+| Operasi database gagal | `try/catch` di route | HTTP 500 + pesan ramah tanpa detail internal | 7.3 |
+| Kontribusi bulanan negatif | Clamp ke 0 di `projection.ts` | Kembalikan 0 | 5.4 |
+| Chatbot gagal inisiasi Gemini | (TETAP) try/catch sebelum stream | HTTP 500/429 + JSON error | 8.5 |
+| Chatbot gagal mid-stream | (TETAP) sentinel `[[STREAM_ERROR]]` | UI hentikan loading + tandai | 8.5 |
 
 ## Testing Strategy
 
-PoC — verifikasi manual berbasis skenario (bukan unit test otomatis), sejalan dengan scope:
-- **Req 3.1/3.2:** Kirim "Bantu atur keuangan saya" → asisten meminta 3 data, tidak mengarang nominal.
-- **Req 3.4:** "Gaji 10 juta, tanpa utang" → 5jt/3jt/2jt tepat.
-- **Req 4.1:** Verifikasi disclaimer selalu muncul di akhir ringkasan.
-- **Req 2:** Amati teks muncul progresif + auto-scroll.
-- **Req 7.2:** Simulasikan kegagalan (mis. matikan koneksi/putus key sementara) → UI tidak menggantung, loading berhenti.
-- **Req 6:** Inspeksi bundle klien / network tab memastikan key tidak terkirim ke browser.
-- **Req 9:** Cek layout di viewport mobile.
+**Pendekatan ganda:**
+- **Property-based tests** (Vitest + library PBT, mis. `fast-check`) untuk logika murni `lib/investment/*`. Minimum 100 iterasi per properti. Setiap test diberi tag `Feature: financial-planner, Property {n}: {teks properti}`.
+- **Unit tests (example-based)** untuk sel matriks spesifik (table tests per baris), kasus batas (horizon 2 dan 5), angka kontribusi yang diverifikasi manual, dan input invalid.
+- **Integration/component tests** untuk API wiring (`/api/recommendation` menggabungkan skoring→alokasi→proyeksi→persist), Profile_Gate (redirect saat profil null), alur UI Investment, dan interaksi ChatDrawer (toggle buka/tutup, Escape, kiriman tetap jalan, a11y dasar).
+
+**Mengapa PBT hanya untuk `lib/investment/*`:**
+- Fungsi murni dengan perilaku bervariasi terhadap input → 100 iterasi menemukan kasus tepi (batas horizon, savings besar, return ekstrem).
+- Persistensi PostgreSQL, konfigurasi Prisma, dan rendering UI **tidak** cocok PBT: gunakan integration test dengan 1–3 contoh representatif dan snapshot/component test.
+
+**Konfigurasi property test:**
+- Library PBT (jangan implementasi dari nol), minimum 100 iterasi.
+- Tiap property test merujuk nomor properti pada design ini.
+
+**TDD:** Task 3, 4, 5 (allocation, projection, risk scoring + route logic) ditulis dengan pendekatan test-first.
 
 ## Keputusan Teknis Utama (Rationale)
 
-- **Node.js runtime** dipilih atas Edge untuk menghindari masalah kompatibilitas SDK `@google/genai` dan streaming di Edge.
-- **temperature 0.4** menyeimbangkan bahasa natural dengan konsistensi kalkulasi numerik.
-- **Format history flat** menjaga UI bebas dari detail SDK; pemetaan terpusat di server.
-- **Streaming teks polos + sentinel** dipilih ketimbang SSE demi kesederhanaan PoC, sambil tetap menjadikan error mid-stream dapat dideteksi.
-- **Batas 20 pesan** mengendalikan biaya token dan latensi pada percakapan panjang.
+- **Rule-based untuk angka investasi** menjaga rekomendasi deterministik, teruji, dan bebas halusinasi LLM; AI hanya untuk konsultasi naratif via chatbot.
+- **`lib/investment/*` sebagai pure function terisolasi** memungkinkan fitur Planner (mengonsumsi Monthly_Contribution) dan integrasi Chatbot (mengonsumsi profil + rekomendasi) memakai ulang logika tanpa duplikasi (Req 9).
+- **`userId` nullable sejak awal** menyiapkan migrasi ke auth tanpa perubahan skema besar, walau MVP tanpa auth.
+- **PostgreSQL + Prisma** dipilih untuk persistensi permanen dan migrasi terkelola; singleton Prisma Client mencegah kebocoran koneksi di dev (hot reload Next.js).
+- **Chatbot drawer** menjaga chatbot mudah diakses lintas halaman tanpa merombak logika stream yang sudah stabil.

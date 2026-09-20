@@ -1,3 +1,5 @@
+> **Catatan arah produk:** Dokumen ini mendeskripsikan **fitur chatbot pelengkap (complementary)** dari fase PoC. Arah produk keseluruhan kini adalah aplikasi perencana keuangan terstruktur (fokus MVP: cakupan Investasi), dengan chatbot sebagai drawer geser. Lihat [`dokumentasi.md`](./dokumentasi.md) untuk arah dan gambaran keseluruhan yang otoritatif.
+
 # Product Requirement Document (PRD): Financial Planner AI (PoC)
 
 ## 1. Overview & Objectives

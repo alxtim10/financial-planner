@@ -2,104 +2,160 @@
 
 ## Introduction
 
-Financial Planner AI adalah aplikasi web PoC berbasis Next.js yang menyediakan chatbot konsultasi keuangan personal. Pengguna dapat berkonsultasi tentang alokasi anggaran, dana darurat, dan strategi keuangan melalui antarmuka chat interaktif. Sistem memanfaatkan Google Gemini API di sisi server (agar API key tidak bocor ke klien) dengan respons yang dialirkan secara streaming.
+**Financial Planner** adalah aplikasi web berbasis Next.js yang membantu pengguna merencanakan keuangan secara terstruktur. Arah produk bergeser dari sekadar chatbot menjadi **aplikasi perencana keuangan terstruktur** sebagai fitur utama, dengan **chatbot AI sebagai fitur pelengkap (complementary)**.
 
-Dokumen ini mendefinisikan kebutuhan fungsional dan non-fungsional untuk PoC. Scope PoC sengaja dibatasi: tanpa autentikasi, tanpa persistensi database, dan riwayat hanya bertahan selama sesi peramban.
+MVP (Minimum Viable Product) berfokus **hanya pada cakupan Investasi (Investment scope)**. Alur utama: pengguna mengisi Profil Finansial (gate wajib) → menetapkan Tujuan (Goal) → mengisi survei Profil Risiko → sistem menghitung rekomendasi alokasi investasi berbasis aturan (rule-based) beserta proyeksi kontribusi bulanan yang diperlukan.
 
-### Tujuan PoC (kriteria validasi)
-- Gemini API dapat menganalisis data keuangan personal dan menghasilkan simulasi anggaran yang koheren.
-- Respons streaming muncul progresif di UI (bukan menunggu balasan penuh).
-- API key aman di sisi server, tidak pernah terekspos ke bundle klien.
+Chatbot yang sudah ada (proxy streaming Gemini di `POST /api/chat`) tetap dipertahankan apa adanya, namun **dikemas ulang** dari halaman penuh menjadi **panel drawer geser dari kanan** yang tersedia di semua halaman.
 
-### Out of Scope (PoC)
-- Autentikasi & akun pengguna.
-- Persistensi riwayat ke database.
-- Sanitasi/proteksi prompt injection.
-- Export PDF/CSV dan visualisasi chart.
+Dokumen naratif utama untuk arah produk baru berada di `dokumentasi.md` (root proyek). Dokumen ini (requirements) mendefinisikan kebutuhan fungsional dan non-fungsional untuk MVP cakupan Investasi.
+
+### Tujuan MVP (kriteria validasi)
+- Pengguna dapat menyelesaikan alur end-to-end: Profil Finansial → Goal → Survei Risiko → Rekomendasi Alokasi + Proyeksi Kontribusi Bulanan.
+- Rekomendasi alokasi ditentukan oleh mesin aturan (matriks Horizon × Profil Risiko) yang deterministik dan teruji.
+- Proyeksi kontribusi bulanan dihitung dengan rumus Future Value of Annuity yang akurat.
+- Data profil, goal, penilaian risiko, dan rekomendasi dipersistensi ke PostgreSQL via Prisma.
+- Chatbot pelengkap tersedia sebagai drawer di semua halaman tanpa mengubah kontrak `/api/chat`.
+
+### Out of Scope (MVP) / Roadmap
+- **Autentikasi & akun pengguna.** Tidak diperlukan untuk MVP. Skema database tetap menyertakan field `userId` (nullable) sebagai placeholder untuk pengembangan auth di masa depan.
+- **Planner (penganggaran harian/bulanan).** Fitur budgeting 50/30/20 terstruktur, pencatatan transaksi harian, dan cash-flow adalah **roadmap**, tidak diimplementasikan di MVP.
+- **Integrasi chatbot ke data pengguna** (chatbot membaca profil + rekomendasi sebagai konteks) adalah **roadmap**, tidak diimplementasikan di MVP.
+- Export PDF/CSV, visualisasi chart lanjutan, dan multi-goal.
+
+---
+
+## Glossary
+
+- **Financial_Planner**: Aplikasi web utama yang memfasilitasi perencanaan keuangan terstruktur.
+- **Investment_Scope**: Cakupan MVP yang menangani rekomendasi alokasi investasi berbasis tujuan dan profil risiko.
+- **Financial_Profile**: Data dasar keuangan pengguna: pemasukan bulanan (income), pengeluaran bulanan (expense), dan tabungan saat ini (current savings). Menjadi gate wajib sebelum mengakses Investment_Scope.
+- **Goal**: Target keuangan pengguna berupa nominal target (target amount) dan horizon waktu (time horizon), mis. Rp 100.000.000 dalam 5 tahun.
+- **Horizon**: Jangka waktu tujuan dalam tahun, diturunkan dari Goal. Dikelompokkan ke bucket: `< 2 tahun`, `2–5 tahun`, `> 5 tahun`.
+- **Risk_Profile**: Klasifikasi toleransi risiko pengguna hasil survei, bernilai salah satu dari `Konservatif`, `Moderat`, atau `Agresif`.
+- **Risk_Assessment**: Kumpulan jawaban survei risiko beserta skor dan Risk_Profile hasil klasifikasi.
+- **Allocation_Engine**: Mesin aturan yang memetakan (Horizon × Risk_Profile) ke komposisi alokasi dan estimasi return tahunan berdasarkan Allocation_Matrix.
+- **Allocation_Matrix**: Tabel 2-dimensi (Horizon × Risk_Profile) yang mendefinisikan komposisi instrumen dan estimasi return tahunan.
+- **Investment_Recommendation**: Hasil akhir berisi komposisi alokasi, estimasi return tahunan, dan proyeksi kontribusi bulanan yang dipersistensi.
+- **Monthly_Contribution**: Kontribusi bulanan yang diperlukan untuk mencapai Goal, dihitung dengan Future Value of Annuity.
+- **Chatbot**: Fitur pelengkap konsultasi keuangan berbasis Gemini yang dikemas sebagai drawer geser dari kanan.
+- **Profile_Gate**: Mekanisme guard yang memblokir akses Investment_Scope bila Financial_Profile belum diisi.
 
 ---
 
 ## Requirements
 
-### Requirement 1: Konsultasi Keuangan via Chat
+### Requirement 1: Profil Finansial sebagai Gate Wajib
 
-**User Story:** Sebagai pengguna, saya ingin mengetik pertanyaan keuangan dan menerima jawaban dari asisten AI, sehingga saya bisa mendapatkan saran perencanaan keuangan secara interaktif.
-
-#### Acceptance Criteria
-1. WHEN pengguna mengirim pesan teks THEN sistem SHALL meneruskan pesan tersebut beserta riwayat percakapan ke Gemini API melalui endpoint server internal.
-2. WHEN Gemini API mengembalikan respons THEN sistem SHALL menampilkan balasan asisten di area percakapan.
-3. WHEN balasan asisten mengandung format Markdown (tabel, bullet, bold) THEN sistem SHALL merender balasan tersebut sebagai Markdown, bukan teks mentah.
-4. WHILE sistem sedang memproses balasan THE SYSTEM SHALL menonaktifkan tombol kirim dan menampilkan indikator loading.
-
-### Requirement 2: Streaming Respons
-
-**User Story:** Sebagai pengguna, saya ingin melihat jawaban muncul bertahap saat sedang dihasilkan, sehingga saya tidak menunggu lama tanpa umpan balik.
+**User Story:** Sebagai pengguna, saya ingin mengisi profil finansial dasar terlebih dahulu, sehingga rekomendasi investasi yang saya terima berdasarkan kondisi keuangan saya yang sebenarnya.
 
 #### Acceptance Criteria
-1. WHEN Gemini API mulai menghasilkan token THEN sistem SHALL mengalirkan potongan teks (chunk) ke UI secara progresif.
-2. WHEN chunk baru diterima THEN sistem SHALL menambahkan teks ke bubble balasan yang sedang aktif (efek typewriter).
-3. WHEN chunk baru dirender THEN sistem SHALL melakukan auto-scroll ke bagian bawah area percakapan.
-4. WHILE streaming berlangsung THE SYSTEM SHALL menjaga UI tetap responsif (non-blocking).
+1. WHEN pengguna mengirim Financial_Profile berisi pemasukan bulanan, pengeluaran bulanan, dan tabungan saat ini, THE Financial_Planner SHALL menyimpan Financial_Profile ke database.
+2. IF pemasukan bulanan, pengeluaran bulanan, atau tabungan saat ini bernilai negatif, THEN THE Financial_Planner SHALL menolak penyimpanan dan mengembalikan pesan validasi.
+3. WHEN pengguna mencoba mengakses Investment_Scope tanpa Financial_Profile tersimpan, THE Profile_Gate SHALL mengarahkan pengguna ke halaman pengisian Financial_Profile.
+4. WHEN Financial_Profile sudah tersimpan, THE Profile_Gate SHALL mengizinkan akses ke Investment_Scope.
+5. THE Financial_Profile SHALL menyimpan field `userId` yang boleh bernilai null pada MVP.
 
-### Requirement 3: Panduan Input Finansial (Guardrails)
+### Requirement 2: Penetapan Tujuan (Goal)
 
-**User Story:** Sebagai pengguna baru, saya ingin dituntun memberikan data yang relevan ketika input saya kurang lengkap, sehingga saran yang saya terima akurat dan bukan tebakan acak.
-
-#### Acceptance Criteria
-1. WHEN pengguna memberikan permintaan umum tanpa data finansial (mis. "Bantu atur keuangan saya") THEN asisten SHALL meminta minimal 3 data inti: pemasukan bulanan, pengeluaran/cicilan tetap, dan tujuan keuangan.
-2. IF data pemasukan atau pengeluaran belum disebutkan THEN asisten SHALL TIDAK memberikan alokasi angka nominal secara acak.
-3. WHEN pengguna menyediakan nominal pemasukan tanpa detail utang THEN asisten SHALL menerapkan acuan alokasi 50/30/20 sebagai dasar rekomendasi.
-4. WHEN asisten menghasilkan kalkulasi alokasi 50/30/20 atas nominal tertentu THEN nilai setiap kategori SHALL dihitung tepat secara matematis (50%, 30%, 20% dari nominal).
-
-### Requirement 4: Disclaimer Wajib
-
-**User Story:** Sebagai penyedia PoC, saya ingin setiap saran keuangan disertai disclaimer, sehingga pengguna memahami ini bukan nasihat finansial tersertifikasi.
+**User Story:** Sebagai pengguna, saya ingin menetapkan target nominal dan jangka waktu, sehingga sistem tahu berapa banyak yang harus saya kumpulkan dan dalam berapa lama.
 
 #### Acceptance Criteria
-1. WHEN asisten menghasilkan ringkasan atau kesimpulan rencana keuangan THEN balasan SHALL diakhiri dengan pernyataan disclaimer bahwa simulasi bersifat edukatif dan bukan nasihat investasi/keuangan tersertifikasi.
+1. WHEN pengguna mengirim Goal berisi nominal target dan jangka waktu dalam tahun, THE Financial_Planner SHALL menyimpan Goal ke database.
+2. THE Financial_Planner SHALL menurunkan Horizon dari jangka waktu Goal dalam satuan tahun.
+3. IF nominal target Goal bernilai kurang dari atau sama dengan nol, THEN THE Financial_Planner SHALL menolak penyimpanan dan mengembalikan pesan validasi.
+4. IF jangka waktu Goal bernilai kurang dari atau sama dengan nol, THEN THE Financial_Planner SHALL menolak penyimpanan dan mengembalikan pesan validasi.
+5. THE Goal SHALL menyimpan field `userId` yang boleh bernilai null pada MVP.
 
-### Requirement 5: Quick Prompts
+### Requirement 3: Survei dan Skoring Profil Risiko
 
-**User Story:** Sebagai pengguna, saya ingin tombol preset skenario umum, sehingga saya bisa memulai konsultasi tanpa mengetik dari nol.
-
-#### Acceptance Criteria
-1. WHEN halaman chat dimuat THEN sistem SHALL menampilkan beberapa tombol quick prompt (mis. alokasi gaji bulanan, hitung dana darurat, strategi pelunasan utang).
-2. WHEN pengguna menekan sebuah quick prompt THEN sistem SHALL mengisi/mengirim teks prompt tersebut sebagai pesan pengguna.
-
-### Requirement 6: Keamanan API Key
-
-**User Story:** Sebagai pemilik proyek, saya ingin API key Gemini tetap rahasia, sehingga tidak disalahgunakan pihak lain.
+**User Story:** Sebagai pengguna, saya ingin mengisi survei singkat, sehingga sistem dapat menentukan profil risiko saya secara objektif.
 
 #### Acceptance Criteria
-1. WHERE pemanggilan Gemini API dilakukan THE SYSTEM SHALL menjalankannya hanya di sisi server (route handler), tidak pernah dari klien.
-2. THE SYSTEM SHALL membaca API key dari environment variable `GEMINI_API_KEY` tanpa prefix `NEXT_PUBLIC_`.
-3. THE SYSTEM SHALL TIDAK menyertakan API key dalam respons apa pun yang dikirim ke klien.
+1. WHEN pengguna menyelesaikan survei Risk_Assessment, THE Financial_Planner SHALL menghitung skor total dari jawaban survei.
+2. WHEN skor total dihitung, THE Financial_Planner SHALL mengklasifikasikan Risk_Profile ke salah satu dari `Konservatif`, `Moderat`, atau `Agresif`.
+3. THE Financial_Planner SHALL memetakan skor total ke Risk_Profile secara deterministik berdasarkan ambang batas skor yang tetap.
+4. WHEN Risk_Assessment selesai dihitung, THE Financial_Planner SHALL menyimpan Risk_Assessment beserta Risk_Profile hasil klasifikasi ke database.
+5. THE Risk_Assessment SHALL menyimpan field `userId` yang boleh bernilai null pada MVP.
 
-### Requirement 7: Penanganan Error
+### Requirement 4: Rekomendasi Alokasi Investasi Berbasis Aturan
 
-**User Story:** Sebagai pengguna, saya ingin mendapat pesan yang jelas ketika terjadi kegagalan, sehingga saya tahu harus mencoba lagi dan tidak menunggu tanpa kepastian.
-
-#### Acceptance Criteria
-1. IF pemanggilan Gemini API gagal sebelum stream dimulai (mis. rate limit, koneksi) THEN sistem SHALL mengembalikan respons error HTTP dengan pesan yang ramah pengguna, dan UI SHALL menampilkannya di area chat.
-2. IF terjadi kegagalan di tengah streaming THEN sistem SHALL menghentikan indikator loading dan menampilkan penanda error ke pengguna sehingga UI tidak menggantung.
-3. WHEN error ditampilkan THE SYSTEM SHALL mengembalikan kontrol input ke pengguna (tombol kirim aktif kembali).
-
-### Requirement 8: Manajemen Riwayat Sesi
-
-**User Story:** Sebagai pengguna, saya ingin asisten mengingat konteks percakapan dalam sesi berjalan, sehingga saran menyambung dari pesan sebelumnya.
+**User Story:** Sebagai pengguna, saya ingin mendapat komposisi alokasi investasi yang sesuai dengan horizon dan profil risiko saya, sehingga saya tahu instrumen apa yang cocok.
 
 #### Acceptance Criteria
-1. WHEN pengguna mengirim pesan lanjutan THEN sistem SHALL menyertakan riwayat percakapan sebelumnya dalam permintaan ke Gemini API.
-2. WHEN riwayat percakapan melebihi 20 pesan THEN sistem SHALL hanya menyertakan 20 pesan terbaru ke server untuk mengontrol biaya token dan latensi.
-3. WHEN pengguna memuat ulang (refresh) halaman THEN riwayat sesi SHALL hilang (tidak ada persistensi).
-4. THE SYSTEM SHALL merepresentasikan riwayat di klien/API dalam format flat `{ role, content }` dengan `role` hanya bernilai `"user"` atau `"model"`.
+1. WHEN Horizon dan Risk_Profile tersedia, THE Allocation_Engine SHALL menentukan komposisi alokasi dan estimasi return tahunan dari Allocation_Matrix.
+2. WHERE Horizon bernilai kurang dari 2 tahun, THE Allocation_Engine SHALL mengembalikan komposisi 100% RDPU dengan estimasi return tahunan 4,75% tanpa memperhatikan Risk_Profile.
+3. WHERE Horizon bernilai antara 2 sampai 5 tahun DAN Risk_Profile adalah `Konservatif`, THE Allocation_Engine SHALL mengembalikan komposisi 70% RDPU + 30% SBN/Deposito dengan estimasi return tahunan 5,5%.
+4. WHERE Horizon bernilai antara 2 sampai 5 tahun DAN Risk_Profile adalah `Moderat`, THE Allocation_Engine SHALL mengembalikan komposisi 50% RDPU + 50% Emas/SBN Ritel dengan estimasi return tahunan 6,5%.
+5. WHERE Horizon bernilai antara 2 sampai 5 tahun DAN Risk_Profile adalah `Agresif`, THE Allocation_Engine SHALL mengembalikan komposisi 30% RDPU + 40% SBN/RDPT + 30% Emas dengan estimasi return tahunan 7,5%.
+6. WHERE Horizon bernilai lebih dari 5 tahun DAN Risk_Profile adalah `Konservatif`, THE Allocation_Engine SHALL mengembalikan komposisi 50% SBN/RDPT + 30% Emas + 20% Saham dengan estimasi return tahunan 7,0%.
+7. WHERE Horizon bernilai lebih dari 5 tahun DAN Risk_Profile adalah `Moderat`, THE Allocation_Engine SHALL mengembalikan komposisi 40% Saham/Indeks + 40% SBN + 20% Emas dengan estimasi return tahunan 9,5%.
+8. WHERE Horizon bernilai lebih dari 5 tahun DAN Risk_Profile adalah `Agresif`, THE Allocation_Engine SHALL mengembalikan komposisi 70% Saham/Indeks + 20% SBN + 10% Emas dengan estimasi return tahunan 11,0%.
+9. IF Risk_Profile bukan salah satu dari `Konservatif`, `Moderat`, atau `Agresif`, THEN THE Allocation_Engine SHALL menandai input tidak valid dan mengembalikan error.
+10. THE Allocation_Engine SHALL mengembalikan komposisi yang total persentase alokasinya sama dengan 100%.
 
-### Requirement 9: Antarmuka Responsif
+### Requirement 5: Proyeksi Kontribusi Bulanan
 
-**User Story:** Sebagai pengguna mobile, saya ingin antarmuka chat nyaman di layar kecil, sehingga saya bisa berkonsultasi dari ponsel.
+**User Story:** Sebagai pengguna, saya ingin tahu berapa yang perlu saya sisihkan tiap bulan, sehingga saya bisa menilai apakah tujuan saya realistis.
 
 #### Acceptance Criteria
-1. WHEN aplikasi dibuka di viewport mobile THEN layout chat SHALL tetap terbaca dan input tetap dapat diakses.
-2. THE SYSTEM SHALL menyediakan area percakapan yang dapat di-scroll dengan pemisah visual yang jelas antara pesan pengguna dan asisten.
-3. THE SYSTEM SHALL membungkus konten chat dalam container dengan lebar maksimum ~768px (`max-w-3xl`) yang di-tengah-kan pada layar lebar (desktop), dan mengisi penuh lebar dengan padding tepi pada mobile.
-4. THE SYSTEM SHALL membatasi lebar bubble pesan hingga ~80% lebar container agar percakapan terlihat seperti antarmuka chat AI pada umumnya.
+1. WHEN nominal target, jangka waktu, tabungan saat ini, dan estimasi return tahunan tersedia, THE Financial_Planner SHALL menghitung Monthly_Contribution menggunakan rumus Future Value of Annuity.
+2. THE Financial_Planner SHALL menggunakan tingkat bunga bulanan `i` sama dengan estimasi return tahunan dibagi 12 dan jumlah periode `n` sama dengan jangka waktu dalam bulan.
+3. IF estimasi return tahunan bernilai nol, THEN THE Financial_Planner SHALL menghitung Monthly_Contribution menggunakan pembagian linear yaitu selisih nominal target dan tabungan saat ini dibagi jumlah bulan.
+4. WHEN hasil Monthly_Contribution bernilai negatif karena tabungan saat ini sudah cukup, THE Financial_Planner SHALL membatasi nilai minimum Monthly_Contribution ke nol.
+5. WHEN Investment_Recommendation dihasilkan, THE Financial_Planner SHALL menyimpan komposisi alokasi, estimasi return tahunan, dan Monthly_Contribution ke database sebagai Investment_Recommendation.
+6. THE Investment_Recommendation SHALL menyimpan field `userId` yang boleh bernilai null pada MVP.
+
+### Requirement 6: Tampilan Rekomendasi Investasi
+
+**User Story:** Sebagai pengguna, saya ingin melihat rekomendasi saya secara jelas beserta disclaimer, sehingga saya memahami hasil dan batasannya.
+
+#### Acceptance Criteria
+1. WHEN Investment_Recommendation tersedia, THE Financial_Planner SHALL menampilkan komposisi alokasi, estimasi return tahunan, dan Monthly_Contribution.
+2. WHEN Investment_Recommendation ditampilkan, THE Financial_Planner SHALL menyertakan disclaimer edukatif bahwa rekomendasi bersifat edukatif dan bukan nasihat investasi tersertifikasi.
+3. WHEN aplikasi dibuka di viewport mobile, THE Financial_Planner SHALL menjaga tampilan rekomendasi tetap terbaca.
+
+### Requirement 7: Persistensi Data via PostgreSQL
+
+**User Story:** Sebagai pemilik proyek, saya ingin data pengguna tersimpan permanen, sehingga rekomendasi dapat ditinjau kembali dan menjadi fondasi fitur lanjutan.
+
+#### Acceptance Criteria
+1. THE Financial_Planner SHALL menyimpan Financial_Profile, Goal, Risk_Assessment, dan Investment_Recommendation ke database PostgreSQL melalui Prisma.
+2. THE Financial_Planner SHALL membaca koneksi database dari environment variable `DATABASE_URL`.
+3. IF operasi database gagal, THEN THE Financial_Planner SHALL mengembalikan respons error yang ramah pengguna tanpa mengekspos detail internal.
+4. THE Financial_Planner SHALL menggunakan satu instance Prisma Client tunggal (singleton) untuk seluruh operasi database.
+
+### Requirement 8: Chatbot Pelengkap sebagai Drawer
+
+**User Story:** Sebagai pengguna, saya ingin membuka asisten AI kapan saja dari sudut layar, sehingga saya bisa bertanya tanpa meninggalkan halaman yang sedang saya buka.
+
+#### Acceptance Criteria
+1. THE Financial_Planner SHALL menampilkan tombol ikon pembuka Chatbot di sudut kanan atas pada semua halaman.
+2. WHEN pengguna menekan tombol pembuka Chatbot, THE Financial_Planner SHALL menampilkan panel drawer yang meluncur masuk dari sisi kanan.
+3. WHEN pengguna menekan tombol tutup, area backdrop, atau tombol Escape, THE Financial_Planner SHALL menutup panel drawer.
+4. WHILE panel drawer terbuka, THE Chatbot SHALL mengirim pesan ke endpoint `POST /api/chat` tanpa perubahan kontrak API.
+5. THE Financial_Planner SHALL mempertahankan perilaku streaming, penanganan error, dan sentinel `[[STREAM_ERROR]]` yang sudah ada pada Chatbot.
+
+### Requirement 9: Ekstensibilitas Logika Investasi (Fondasi Roadmap)
+
+**User Story:** Sebagai pengembang, saya ingin logika investasi terisolasi dan dapat dipakai ulang, sehingga fitur Planner dan integrasi Chatbot di masa depan dapat mengonsumsinya tanpa duplikasi.
+
+#### Acceptance Criteria
+1. THE Financial_Planner SHALL menempatkan Allocation_Engine, kalkulator Monthly_Contribution, dan skoring risiko sebagai modul pure function terpisah di `lib/investment/`.
+2. THE modul di `lib/investment/` SHALL dapat diimpor secara independen tanpa bergantung pada lapisan UI atau lapisan API.
+3. THE dokumentasi SHALL mencantumkan kontrak data yang akan dikonsumsi fitur Planner (Monthly_Contribution) dan Chatbot (konteks profil + rekomendasi) di masa depan.
+
+---
+
+## Referensi Fitur yang Sudah Ada (Chatbot Pelengkap)
+
+Kebutuhan berikut sudah terpenuhi oleh implementasi Chatbot yang ada dan tetap berlaku sebagai fitur pelengkap. Detail lengkap ada di `PRD.md`, `DESIGN.md`, `REQUIREMENTS.md`, dan `TASKS.md` (lihat catatan pengarah di puncak masing-masing dokumen):
+
+- Konsultasi keuangan via chat streaming dengan render Markdown.
+- Guardrails input finansial (minta 3 data inti bila kurang) dan acuan 50/30/20 di dalam prompt.
+- Disclaimer edukatif wajib pada setiap ringkasan.
+- Keamanan API key di sisi server (`GEMINI_API_KEY` tanpa prefix `NEXT_PUBLIC_`).
+- Penanganan error inisiasi (HTTP 500/429) dan mid-stream (sentinel `[[STREAM_ERROR]]`).
+- Manajemen riwayat sesi (20 pesan terakhir, format flat `{ role, content }`).
+
+Perubahan satu-satunya terhadap Chatbot pada fase ini adalah **pengemasan UI** dari halaman penuh menjadi drawer (Requirement 8). Kontrak `POST /api/chat`, `lib/prompt.ts`, dan `types/chat.ts` tidak berubah.

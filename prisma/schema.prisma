@@ -1,0 +1,50 @@
+// Prisma schema untuk Financial Planner (Investment Scope MVP).
+// Koneksi dibaca dari env DATABASE_URL. Field `userId` nullable sebagai
+// placeholder untuk auth di masa depan (MVP tanpa auth).
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model FinancialProfile {
+  id             String   @id @default(cuid())
+  userId         String? // placeholder auth (nullable di MVP)
+  income         Float
+  expense        Float
+  currentSavings Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Goal {
+  id           String   @id @default(cuid())
+  userId       String?
+  targetAmount Float
+  horizonYears Int
+  createdAt    DateTime @default(now())
+}
+
+model RiskAssessment {
+  id        String   @id @default(cuid())
+  userId    String?
+  answers   Int[] // jawaban survei mentah
+  score     Int
+  profile   String // "Konservatif" | "Moderat" | "Agresif"
+  createdAt DateTime @default(now())
+}
+
+model InvestmentRecommendation {
+  id                  String   @id @default(cuid())
+  userId              String?
+  goalId              String?
+  riskProfile         String
+  composition         Json // AllocationSlice[]
+  annualReturn        Float
+  monthlyContribution Float
+  createdAt           DateTime @default(now())
+}
