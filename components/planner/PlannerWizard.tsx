@@ -9,6 +9,7 @@ import type {
   BudgetBreakdown,
   PresetId,
   SavingsMode,
+  SavingsProjection,
   ShortfallResult,
 } from "@/types/planner";
 
@@ -28,6 +29,7 @@ interface BudgetResult {
   investmentContribution: number;
   manualSavingsTarget: number | null;
   shortfall: ShortfallResult;
+  savingsProjection: SavingsProjection | null;
   recommendationMissing?: boolean;
 }
 
@@ -119,6 +121,8 @@ export default function PlannerWizard() {
           baseAmount: values.baseAmount,
           mode: values.mode,
           manualSavingsTarget: values.manualSavingsTarget,
+          savingsTargetAmount: values.savingsTargetAmount,
+          savingsHorizonYears: values.savingsHorizonYears,
         }),
       });
 
@@ -274,6 +278,7 @@ export default function PlannerWizard() {
               investmentContribution={result.investmentContribution}
               manualSavingsTarget={result.manualSavingsTarget}
               shortfall={result.shortfall}
+              savingsProjection={result.savingsProjection}
               mode={submittedMode}
               recommendationMissing={result.recommendationMissing}
               onRestart={handleRestart}

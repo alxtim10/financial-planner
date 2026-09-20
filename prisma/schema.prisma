@@ -57,6 +57,8 @@ model BudgetPlan {
   mode                   String // "terpisah" | "kombinasi"
   manualSavingsTarget    Float?
   investmentContribution Float? // snapshot monthlyContribution (kombinasi)
+  savingsTargetAmount    Float? // target tabungan opsional (proyeksi)
+  savingsHorizonYears    Int? // horizon tahun opsional (Arah B)
   breakdown              Json // BudgetLine[] hasil computeBudget
   createdAt              DateTime @default(now())
 }

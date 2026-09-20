@@ -70,8 +70,55 @@ Rencana implementasi menambahkan cakupan **Planner** (penganggaran alokasi berba
   - [ ]* 7.2 Component test: dashboard memuat tautan ke `/planner`.
     - _Requirements: 9.2_
 
-- [-] 8. Checkpoint akhir — pastikan build & test hijau
+- [x] 8. Checkpoint akhir — pastikan build & test hijau
   - Jalankan `npm run build` (harus bersih) dan `npm test` (semua hijau). Pastikan semua test lulus; tanyakan ke pengguna bila muncul pertanyaan.
+
+## Delta: Proyeksi Target Tabungan Opsional (Requirements 11–12)
+
+> **Catatan penting.** Task 1–8 di atas **sudah selesai** dan build hijau. Task 9–14 berikut adalah **penambahan inkremental** di atas implementasi yang sudah ada — mengubah/menambah berkas yang ada, bukan menulis ulang. Ikuti urutan: migrasi aditif → tipe → logika murni (TDD) → API → UI → checkpoint. Sub-task bertanda `*` bersifat opsional (test).
+
+- [x] 9. Migrasi Prisma aditif: field proyeksi pada `BudgetPlan`
+  - Tambahkan dua field **nullable** ke model `BudgetPlan` di `prisma/schema.prisma`: `savingsTargetAmount Float?` dan `savingsHorizonYears Int?`. **JANGAN** ubah kolom lain.
+  - Jalankan migrasi tambahan `prisma migrate dev --name add_savings_projection` (aditif; **JANGAN** reset DB — data `BudgetPlan`/Investasi harus tetap ada). Bila migrasi gagal karena izin/koneksi, laporkan ke pengguna dan tanyakan alih-alih memaksa.
+  - Regenerasi Prisma Client.
+  - _Requirements: 12.7_
+
+- [x] 10. Tambah tipe proyeksi ke `types/planner.ts`
+  - Tambahkan (tanpa mengubah tipe lama): `SavingsProjectionDirection` (`"none" | "time-to-goal" | "required-monthly"`), `MonthsToReachResult` (`reachable`, `months`), dan `SavingsProjection` (direction, targetAmount, horizonYears, monthlySavingRate, annualReturn, reachable, months, years, requiredMonthly, allocationSufficient, monthlyGap).
+  - _Requirements: 11.1, 11.3, 11.4, 12.8_
+
+- [x] 11. Modul proyeksi murni `lib/planner/savingsProjection.ts` (TDD)
+  - [x] 11.1 Implementasikan `savingsProjection.ts` (impor tipe saja dari `@/types/planner`): `monthsToReachTarget({ targetAmount, monthlySaving, annualReturn })` (Arah A: tanpa bunga `ceil(target/monthlySaving)`; berpertumbuhan `n = ln(1 + target×i/monthlySaving)/ln(1+i)` lalu `ceil`; `monthlySaving<=0` tanpa pertumbuhan → `{ reachable:false, months:null }`) dan `requiredMonthlySaving({ targetAmount, horizonYears, annualReturn })` (Arah B: tanpa bunga `target/(horizon×12)`; berpertumbuhan `PMT = target×i/((1+i)^n − 1)`; clamp min 0). Pasang guard input (target berhingga>0, horizon bulat>0, annualReturn berhingga≥0, monthlySaving berhingga≥0).
+    - _Requirements: 11.6, 12.1, 12.3, 12.4, 12.5, 12.6_
+  - [ ]* 11.2 Property test: Required_Monthly_Saving mencapai target (round-trip FV annuity, annualReturn≥0).
+    - **Feature: budget-planner, Property 6: Required_Monthly_Saving mencapai target (round-trip FV annuity)**
+    - **Validates: Requirements 11.4, 12.1, 12.3, 12.4**
+  - [ ]* 11.3 Property test: konsistensi Time_To_Goal (`months` batas naik/turun akumulasi).
+    - **Feature: budget-planner, Property 7: Konsistensi Time_To_Goal (monthsToReachTarget)**
+    - **Validates: Requirements 11.3, 12.1, 12.3, 12.4**
+  - [ ]* 11.4 Property test: laju tabungan nol tanpa pertumbuhan → tidak akan tercapai (reachable=false, months=null); nilai besar dikembalikan apa adanya.
+    - **Feature: budget-planner, Property 8: Laju tabungan nol tanpa pertumbuhan → tidak akan tercapai**
+    - **Validates: Requirements 12.5, 12.6**
+  - [ ]* 11.5 Property test: input proyeksi tidak valid ditolak (target bukan berhingga>0, horizon bukan bulat>0, annualReturn bukan berhingga≥0 → throw).
+    - **Feature: budget-planner, Property 9: Input proyeksi tidak valid ditolak**
+    - **Validates: Requirements 11.7, 11.8**
+
+- [x] 12. Extend API `POST /api/budget` — orkestrasi proyeksi
+  - [x] 12.1 Tambahkan penerimaan & validasi field opsional `savingsTargetAmount` (bila ada: berhingga > 0 → 400 bila tidak) dan `savingsHorizonYears` (bila ada: `Number.isInteger` & > 0 → 400 bila tidak) di `app/api/budget/route.ts`. Pada mode `kombinasi`, ambil `annualReturn` dari `InvestmentRecommendation` terbaru (0 bila tak ada) sebagai `Growth_Rate`; mode `terpisah` → `Growth_Rate = 0`. Bila `savingsTargetAmount` ada, panggil `monthsToReachTarget` (Arah A, tanpa horizon) atau `requiredMonthlySaving` + banding `savingsBucketAmount` (Arah B, dengan horizon), susun objek `savingsProjection`; bila tidak ada → `savingsProjection: null`. Persist `savingsTargetAmount`/`savingsHorizonYears` ke `BudgetPlan`. Sertakan `savingsProjection` di respons 200.
+    - _Requirements: 11.2, 11.3, 11.4, 11.5, 11.7, 11.8, 12.2, 12.3, 12.4, 12.6, 12.7, 12.8_
+  - [ ]* 12.2 Integration test: tanpa target → savingsProjection null; Arah A (target tanpa horizon); Arah B (target + horizon) cukup vs kurang; kombinasi memakai annualReturn rekomendasi; validasi target/horizon → 400; persistensi field baru (ada vs NULL).
+    - _Requirements: 11.2, 11.7, 11.8, 12.3, 12.7_
+
+- [x] 13. Extend UI Planner — form & hasil proyeksi
+  - [x] 13.1 Extend `components/planner/BudgetForm.tsx`: tambahkan input opsional `Savings_Target_Amount` (Rupiah) dan `Savings_Horizon` (tahun) dengan hint Arah A vs B, validasi lapisan form (target diisi → > 0; horizon diisi → bilangan bulat > 0), dan teruskan `savingsTargetAmount`/`savingsHorizonYears` ke `onSubmit`. Perbarui `PlannerWizard.tsx` untuk mengirim field ini ke POST dan meneruskan `savingsProjection` ke hasil.
+    - _Requirements: 11.1, 12.9_
+  - [x] 13.2 Extend `components/planner/BudgetResultCard.tsx`: render panel `Savings_Projection` bila tidak null — Arah A "tercapai dalam ~X bulan (~Y tahun)"; Arah B "butuh Rp .../bulan" + badge alokasi preset cukup/kurang Rp ...; status "tidak akan tercapai dengan alokasi saat ini" saat `reachable=false`; nilai berhingga besar apa adanya. Pertahankan format Rupiah `Rp ${Math.round(v).toLocaleString("id-ID")}` dan gaya Miami blue.
+    - _Requirements: 12.5, 12.6, 12.8, 12.9_
+  - [ ]* 13.3 Component test: `BudgetResultCard` menampilkan Arah A, Arah B (cukup & kurang), dan status "tidak akan tercapai"; `BudgetForm` menampilkan kedua field opsional dengan hint.
+    - _Requirements: 11.1, 12.5, 12.6, 12.8_
+
+- [x] 14. Checkpoint delta — pastikan build & test hijau
+  - Jalankan `npm run build` (harus bersih) dan `npm test` (logika `savingsProjection` + suite lama hijau). Pastikan semua test lulus; tanyakan ke pengguna bila muncul pertanyaan.
 
 ## Notes
 
@@ -81,8 +128,11 @@ Rencana implementasi menambahkan cakupan **Planner** (penganggaran alokasi berba
 - Migrasi Task 1 bersifat **tambahan** — jangan reset database (data cakupan Investasi harus tetap ada).
 - Pembulatan Rupiah hanya di lapisan tampilan; `computeBudget` mempertahankan presisi agar total pos sama dengan `Base_Amount`.
 - Setiap property test menyertakan tag `Feature: budget-planner, Property {n}: {teks}` dan merujuk properti pada `design.md`.
+- **Delta (Task 9–14):** dibangun di atas implementasi yang sudah hijau; migrasi Task 9 bersifat **aditif nullable** — jangan reset DB. `savingsProjection.ts` tetap murni (impor tipe saja). Nilai berhingga besar ditampilkan apa adanya; hanya laju tabungan nol tanpa pertumbuhan yang jadi status "tidak akan tercapai".
 
 ## Task Dependency Graph
+
+Wave 0–8 adalah alokasi (Task 1–8, sudah selesai). Wave 9–13 adalah delta proyeksi target tabungan (Task 9–14); wave delta hanya berjalan setelah wave alokasi selesai dan mengikuti urutan migrasi → tipe → logika murni → API → UI, dengan test setelah kode yang diujinya.
 
 ```json
 {
@@ -95,7 +145,13 @@ Rencana implementasi menambahkan cakupan **Planner** (penganggaran alokasi berba
     { "id": 5, "tasks": ["4.3", "4.4"] },
     { "id": 6, "tasks": ["6.1", "6.2"] },
     { "id": 7, "tasks": ["6.3", "7.1"] },
-    { "id": 8, "tasks": ["6.4", "6.5", "7.2"] }
+    { "id": 8, "tasks": ["6.4", "6.5", "7.2"] },
+    { "id": 9, "tasks": ["9", "10"] },
+    { "id": 10, "tasks": ["11.1"] },
+    { "id": 11, "tasks": ["11.2", "11.3", "11.4", "11.5", "12.1"] },
+    { "id": 12, "tasks": ["12.2", "13.2"] },
+    { "id": 13, "tasks": ["13.1"] },
+    { "id": 14, "tasks": ["13.3"] }
   ]
 }
 ```

@@ -1,7 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Wallet, PiggyBank, TrendingUp, Loader2, ArrowRight, Info } from "lucide-react";
+import {
+  Wallet,
+  PiggyBank,
+  TrendingUp,
+  Loader2,
+  ArrowRight,
+  Info,
+  Target,
+  CalendarClock,
+} from "lucide-react";
 import type { SavingsMode } from "@/types/planner";
 
 /** Nilai yang diserahkan ke parent (PlannerWizard) saat submit. */
@@ -9,6 +18,10 @@ export interface BudgetFormValues {
   baseAmount: number;
   mode: SavingsMode;
   manualSavingsTarget: number | null;
+  /** Savings_Target_Amount (Rupiah); `null` bila field kosong (tanpa proyeksi). */
+  savingsTargetAmount: number | null;
+  /** Savings_Horizon (tahun); `null` bila field kosong. */
+  savingsHorizonYears: number | null;
 }
 
 interface BudgetFormProps {
@@ -26,7 +39,11 @@ interface BudgetFormProps {
   submitting?: boolean;
 }
 
-type FieldKey = "baseAmount" | "manualSavingsTarget";
+type FieldKey =
+  | "baseAmount"
+  | "manualSavingsTarget"
+  | "savingsTargetAmount"
+  | "savingsHorizonYears";
 type FieldErrors = Partial<Record<FieldKey, string>>;
 
 /** Format angka ke Rupiah gaya Indonesia (10000 → "Rp 10.000"). */
@@ -58,6 +75,27 @@ function validateManualTarget(value: string): string | undefined {
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return "Harus berupa angka.";
   if (n < 0) return "Tidak boleh negatif.";
+  return undefined;
+}
+
+/** Validasi Savings_Target_Amount: opsional, tapi bila diisi harus angka > 0 (Req 11.1, 11.7). */
+function validateSavingsTarget(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) return "Harus berupa angka.";
+  if (n <= 0) return "Harus lebih dari 0.";
+  return undefined;
+}
+
+/** Validasi Savings_Horizon: opsional, tapi bila diisi harus bilangan bulat positif (Req 11.1, 11.8). */
+function validateSavingsHorizon(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) return "Harus berupa angka.";
+  if (!Number.isInteger(n)) return "Harus bilangan bulat.";
+  if (n <= 0) return "Harus lebih dari 0.";
   return undefined;
 }
 
@@ -93,6 +131,8 @@ export default function BudgetForm({
   );
   const [mode, setMode] = useState<SavingsMode>("terpisah");
   const [manualSavingsTarget, setManualSavingsTarget] = useState("");
+  const [savingsTargetAmount, setSavingsTargetAmount] = useState("");
+  const [savingsHorizonYears, setSavingsHorizonYears] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
 
   const contribution =
@@ -107,6 +147,10 @@ export default function BudgetForm({
     if (baseErr) next.baseAmount = baseErr;
     const targetErr = validateManualTarget(manualSavingsTarget);
     if (targetErr) next.manualSavingsTarget = targetErr;
+    const savingsTargetErr = validateSavingsTarget(savingsTargetAmount);
+    if (savingsTargetErr) next.savingsTargetAmount = savingsTargetErr;
+    const savingsHorizonErr = validateSavingsHorizon(savingsHorizonYears);
+    if (savingsHorizonErr) next.savingsHorizonYears = savingsHorizonErr;
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -117,15 +161,22 @@ export default function BudgetForm({
     if (!validateAll()) return;
 
     const parsedTarget = manualSavingsTarget.trim();
+    const parsedSavingsTarget = savingsTargetAmount.trim();
+    const parsedSavingsHorizon = savingsHorizonYears.trim();
     onSubmit({
       baseAmount: Number(baseAmount),
       mode,
       manualSavingsTarget: parsedTarget === "" ? null : Number(parsedTarget),
+      savingsTargetAmount:
+        parsedSavingsTarget === "" ? null : Number(parsedSavingsTarget),
+      savingsHorizonYears:
+        parsedSavingsHorizon === "" ? null : Number(parsedSavingsHorizon),
     });
   }
 
   const basePreview = previewRupiah(baseAmount);
   const targetPreview = previewRupiah(manualSavingsTarget);
+  const savingsTargetPreview = previewRupiah(savingsTargetAmount);
 
   return (
     <form
@@ -292,6 +343,134 @@ export default function BudgetForm({
             {targetPreview ? targetPreview : "Isi bila ingin menetapkan target sendiri."}
           </p>
         )}
+      </div>
+
+      {/* Proyeksi target tabungan (opsional) — Savings_Target_Amount & Savings_Horizon */}
+      <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border bg-background/60 p-4">
+        <div className="flex items-start gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
+            <Target className="h-4 w-4" />
+          </span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium text-foreground">
+              Proyeksi target tabungan{" "}
+              <span className="font-normal text-muted">(opsional)</span>
+            </span>
+            <span className="text-xs leading-relaxed text-muted">
+              Isi target saja → estimasi kapan tercapai. Isi target + jangka waktu →
+              tabungan bulanan yang diperlukan.
+            </span>
+          </div>
+        </div>
+
+        {/* Savings_Target_Amount */}
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="savingsTargetAmount"
+            className="text-sm font-medium text-foreground"
+          >
+            Target tabungan
+          </label>
+          <div
+            className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(0,180,216,0.12)] ${
+              errors.savingsTargetAmount
+                ? "border-red-400"
+                : "border-border focus-within:border-[var(--accent)]/50"
+            }`}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
+              <Target className="h-4 w-4" />
+            </span>
+            <span className="shrink-0 text-sm text-muted">Rp</span>
+            <input
+              id="savingsTargetAmount"
+              name="savingsTargetAmount"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step="any"
+              value={savingsTargetAmount}
+              onChange={(e) => {
+                setSavingsTargetAmount(e.target.value);
+                if (errors.savingsTargetAmount)
+                  setErrors((p) => ({ ...p, savingsTargetAmount: undefined }));
+              }}
+              placeholder="0"
+              aria-invalid={errors.savingsTargetAmount ? true : undefined}
+              aria-describedby={
+                errors.savingsTargetAmount
+                  ? "savingsTargetAmount-error"
+                  : "savingsTargetAmount-hint"
+              }
+              className="min-w-0 flex-1 bg-transparent text-[0.9375rem] text-foreground placeholder:text-muted focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+          </div>
+          {errors.savingsTargetAmount ? (
+            <p id="savingsTargetAmount-error" className="text-xs text-red-500">
+              {errors.savingsTargetAmount}
+            </p>
+          ) : (
+            <p id="savingsTargetAmount-hint" className="text-xs text-muted">
+              {savingsTargetPreview
+                ? savingsTargetPreview
+                : "Nominal yang ingin Anda kumpulkan."}
+            </p>
+          )}
+        </div>
+
+        {/* Savings_Horizon */}
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="savingsHorizonYears"
+            className="text-sm font-medium text-foreground"
+          >
+            Jangka waktu{" "}
+            <span className="font-normal text-muted">(tahun, opsional)</span>
+          </label>
+          <div
+            className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(0,180,216,0.12)] ${
+              errors.savingsHorizonYears
+                ? "border-red-400"
+                : "border-border focus-within:border-[var(--accent)]/50"
+            }`}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
+              <CalendarClock className="h-4 w-4" />
+            </span>
+            <input
+              id="savingsHorizonYears"
+              name="savingsHorizonYears"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1}
+              value={savingsHorizonYears}
+              onChange={(e) => {
+                setSavingsHorizonYears(e.target.value);
+                if (errors.savingsHorizonYears)
+                  setErrors((p) => ({ ...p, savingsHorizonYears: undefined }));
+              }}
+              placeholder="0"
+              aria-invalid={errors.savingsHorizonYears ? true : undefined}
+              aria-describedby={
+                errors.savingsHorizonYears
+                  ? "savingsHorizonYears-error"
+                  : "savingsHorizonYears-hint"
+              }
+              className="min-w-0 flex-1 bg-transparent text-[0.9375rem] text-foreground placeholder:text-muted focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <span className="shrink-0 text-sm text-muted">tahun</span>
+          </div>
+          {errors.savingsHorizonYears ? (
+            <p id="savingsHorizonYears-error" className="text-xs text-red-500">
+              {errors.savingsHorizonYears}
+            </p>
+          ) : (
+            <p id="savingsHorizonYears-hint" className="text-xs text-muted">
+              Kosongkan untuk melihat estimasi kapan target tercapai.
+            </p>
+          )}
+        </div>
       </div>
 
       <button

@@ -25,6 +25,7 @@ Cakupan Planner pada iterasi ini **hanya penganggaran alokasi (allocation budget
 - Perhitungan anggaran bersifat **pure, deterministik, dan teruji**: persentase tiap preset berjumlah 100%, jumlah per pos presisi terhadap jumlah dasar.
 - Mode **kombinasi** menarik `monthlyContribution` dari rekomendasi investasi terbaru dan menandai *shortfall* bila ember tabungan preset lebih kecil dari kontribusi investasi yang diperlukan.
 - Rencana anggaran dipersistensi ke model `BudgetPlan` baru dan dapat diambil kembali.
+- Pengguna dapat **opsional** mengisi target nominal tabungan (`Savings_Target_Amount`) dan **opsional** jangka waktunya (`Savings_Horizon`): tanpa target → perilaku alokasi seperti biasa; target tanpa horizon → estimasi waktu tercapai (Arah A); target dengan horizon → tabungan bulanan yang diperlukan beserta penilaian cukup/kurang (Arah B). Perhitungan menyesuaikan `Savings_Mode` (terpisah tanpa bunga vs kombinasi berbasis pertumbuhan).
 
 ---
 
@@ -44,6 +45,13 @@ Cakupan Planner pada iterasi ini **hanya penganggaran alokasi (allocation budget
 - **Manual_Savings_Target**: Target tabungan bulanan yang diisi pengguna secara manual (opsional).
 - **Savings_Shortfall**: Kondisi di mode `kombinasi` ketika alokasi `Savings_Bucket` preset lebih kecil dari `Investment_Contribution` yang diperlukan, sehingga anggaran belum mendanai tujuan investasi.
 - **Budget_Plan**: Entitas persistensi yang menyimpan preset terpilih, `Base_Amount`, `Savings_Mode`, target tabungan/investasi, dan `Budget_Breakdown` hasil perhitungan.
+- **Savings_Target_Amount**: Nominal Rupiah yang ingin dikumpulkan pengguna melalui `Savings_Bucket` bulanan (opsional). Menjadi *pemicu* proyeksi target tabungan; bila tidak diisi, Planner berperilaku alokasi saja tanpa proyeksi.
+- **Savings_Horizon**: Jangka waktu (dalam tahun) yang opsional dan menyertai `Savings_Target_Amount`. Kehadiran/ketiadaan field ini menentukan *arah* proyeksi (lihat `Time_To_Goal` vs `Required_Monthly_Saving`).
+- **Monthly_Saving_Rate**: Laju tabungan bulanan yang dipakai untuk proyeksi target. Didefinisikan sebagai jumlah alokasi `Savings_Bucket` preset per bulan (hasil `savingsBucketAmount(breakdown)`), independen dari `Manual_Savings_Target`.
+- **Time_To_Goal** (Arah A / output): Estimasi berapa bulan (dan tahun) yang diperlukan untuk mencapai `Savings_Target_Amount` pada `Monthly_Saving_Rate` tertentu, dihitung ketika `Savings_Target_Amount` diisi tetapi `Savings_Horizon` **tidak** diisi.
+- **Required_Monthly_Saving** (Arah B / input): Nominal tabungan bulanan yang diperlukan untuk mencapai `Savings_Target_Amount` dalam `Savings_Horizon` yang diberikan, dihitung ketika `Savings_Target_Amount` **dan** `Savings_Horizon` sama-sama diisi.
+- **Savings_Projection**: Hasil proyeksi target tabungan — salah satu dari `Time_To_Goal` (Arah A) atau `Required_Monthly_Saving` beserta pembandingnya terhadap `Monthly_Saving_Rate` (Arah B), termasuk status "tidak akan tercapai" saat laju tabungan efektif nol tanpa pertumbuhan.
+- **Growth_Rate**: Tingkat imbal hasil tahunan (`annualReturn`, desimal) dari `Investment_Recommendation` terbaru, dipakai pada mode `kombinasi` untuk proyeksi berbasis pertumbuhan (Future Value of Annuity). Bernilai 0/tidak ada → proyeksi jatuh ke perhitungan tanpa pertumbuhan.
 
 ---
 
@@ -153,3 +161,34 @@ Cakupan Planner pada iterasi ini **hanya penganggaran alokasi (allocation budget
 1. THE Budget_Planner SHALL menempatkan definisi preset dan fungsi perhitungan anggaran sebagai modul pure function di `lib/planner/` (`presets.ts`, `budget.ts`).
 2. THE modul di `lib/planner/` SHALL dapat diimpor secara independen tanpa bergantung pada lapisan UI, API, atau database.
 3. THE modul di `lib/planner/` SHALL hanya mengimpor tipe dari `@/types/planner` (mengikuti pola `lib/investment/*` yang mengimpor dari `@/types/finance`).
+
+### Requirement 11: Proyeksi Target Tabungan Opsional dengan Horizon Adaptif
+
+**User Story:** Sebagai pengguna, saya ingin menambahkan target nominal tabungan opsional dan (opsional) jangka waktunya, sehingga saya tahu berapa lama target tercapai atau berapa tabungan bulanan yang diperlukan — tanpa mengubah cara Planner bekerja bila saya tidak mengisinya.
+
+Field proyeksi bersifat **tambahan** dan **opsional** di atas alur alokasi yang sudah ada (Requirement 1–10). `Monthly_Saving_Rate` yang dipakai untuk proyeksi adalah jumlah alokasi `Savings_Bucket` preset per bulan (`savingsBucketAmount(breakdown)`), agar proyeksi tetap murni turunan dari alokasi anggaran dan terpisah dari `Manual_Savings_Target`.
+
+#### Acceptance Criteria
+1. THE Budget_Planner SHALL menyediakan field opsional `Savings_Target_Amount` (Rupiah) dan field opsional `Savings_Horizon` (tahun) pada form anggaran.
+2. IF `Savings_Target_Amount` tidak diisi, THEN THE Budget_Planner SHALL tidak menghitung `Savings_Projection` dan berperilaku seperti alokasi saja (Requirement 4 dan 8) tanpa perubahan.
+3. WHERE `Savings_Target_Amount` diisi DAN `Savings_Horizon` tidak diisi, THE Budget_Planner SHALL menghitung `Time_To_Goal` (Arah A): estimasi jumlah bulan untuk mencapai `Savings_Target_Amount` pada `Monthly_Saving_Rate`.
+4. WHERE `Savings_Target_Amount` diisi DAN `Savings_Horizon` diisi, THE Budget_Planner SHALL menghitung `Required_Monthly_Saving` (Arah B): nominal tabungan bulanan yang diperlukan untuk mencapai `Savings_Target_Amount` dalam `Savings_Horizon`, lalu membandingkannya dengan `Monthly_Saving_Rate` dan menandai apakah alokasi preset saat ini cukup atau kurang beserta selisihnya.
+5. THE Budget_Planner SHALL menggunakan `Monthly_Saving_Rate` yang sama dengan jumlah alokasi `Savings_Bucket` preset (`savingsBucketAmount`) sebagai laju tabungan bulanan untuk seluruh proyeksi.
+6. THE Budget_Planner SHALL menempatkan logika proyeksi sebagai pure function di `lib/planner/savingsProjection.ts` yang hanya mengimpor tipe dari `@/types/planner`, tanpa dependensi UI, API, atau database.
+7. IF `Savings_Target_Amount` diisi tetapi bukan angka berhingga yang lebih besar dari 0, THEN THE Budget_Planner SHALL menolak perhitungan dan mengembalikan pesan validasi.
+8. IF `Savings_Horizon` diisi tetapi bukan bilangan bulat positif berhingga, THEN THE Budget_Planner SHALL menolak perhitungan dan mengembalikan pesan validasi.
+
+### Requirement 12: Metode Perhitungan Proyeksi Berdasarkan Savings_Mode
+
+**User Story:** Sebagai pengguna, saya ingin proyeksi target tabungan menyesuaikan mode saya (terpisah vs kombinasi), sehingga estimasinya realistis terhadap apakah dana tumbuh berbunga atau tidak.
+
+#### Acceptance Criteria
+1. WHERE `Savings_Mode` adalah `terpisah`, THE Budget_Planner SHALL menghitung proyeksi tanpa pertumbuhan (tanpa bunga): Arah A `months = ceil(Savings_Target_Amount ÷ Monthly_Saving_Rate)`; Arah B `Required_Monthly_Saving = Savings_Target_Amount ÷ (Savings_Horizon × 12)`.
+2. WHERE `Savings_Mode` adalah `terpisah`, THE Budget_Planner SHALL memperlakukan proyeksi sebagai akumulasi murni mulai dari 0 (tidak mengurangi `currentSavings` profil), agar proyeksi tetap murni turunan alokasi anggaran.
+3. WHERE `Savings_Mode` adalah `kombinasi`, THE Budget_Planner SHALL menghitung proyeksi berbasis pertumbuhan memakai `Growth_Rate` (`annualReturn`) dari `Investment_Recommendation` terbaru dengan rumus Future Value of Annuity yang sama dengan `lib/investment/projection.ts`: Arah B menyelesaikan PMT, Arah A menyelesaikan jumlah periode `n`.
+4. IF `Savings_Mode` adalah `kombinasi` DAN `Growth_Rate` bernilai 0 atau tidak tersedia, THEN THE Budget_Planner SHALL jatuh ke perhitungan tanpa pertumbuhan yang sama dengan mode `terpisah`.
+5. THE Budget_Planner SHALL menampilkan hasil proyeksi apa adanya termasuk nilai yang sangat besar (mis. ratusan tahun), tanpa membatasi atau memberi peringatan pada nilai berhingga yang besar.
+6. IF `Monthly_Saving_Rate` efektif bernilai 0 (dan tanpa pertumbuhan) sehingga target secara matematis tidak akan tercapai, THEN THE Budget_Planner SHALL menandai status "tidak akan tercapai dengan alokasi saat ini" alih-alih menampilkan nilai tak hingga.
+7. WHEN pengguna menyimpan rencana anggaran dengan `Savings_Target_Amount`, THE Budget_Planner SHALL mempersistensi `Savings_Target_Amount` dan (bila ada) `Savings_Horizon` pada `Budget_Plan`.
+8. WHEN `Savings_Projection` tersedia, THE Budget_Planner SHALL menampilkan hasilnya pada tampilan hasil: Arah A sebagai "tercapai dalam ~X bulan (~Y tahun)"; Arah B sebagai nominal tabungan bulanan yang diperlukan beserta status alokasi preset cukup/kurang; dan status "tidak akan tercapai" pada kasus laju tabungan nol.
+9. THE Budget_Planner SHALL memformat seluruh nilai uang proyeksi sebagai Rupiah gaya Indonesia dengan pola `Rp ${Math.round(v).toLocaleString("id-ID")}` dan menjaga gaya visual Miami blue yang konsisten.

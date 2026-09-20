@@ -7,10 +7,15 @@ import {
   PiggyBank,
   TrendingUp,
   Target,
+  CalendarClock,
   AlertTriangle,
   RotateCcw,
 } from "lucide-react";
-import type { BudgetBreakdown, ShortfallResult } from "@/types/planner";
+import type {
+  BudgetBreakdown,
+  ShortfallResult,
+  SavingsProjection,
+} from "@/types/planner";
 
 interface BudgetResultCardProps {
   breakdown: BudgetBreakdown; // { presetId, baseAmount, lines: BudgetLine[] }
@@ -20,6 +25,7 @@ interface BudgetResultCardProps {
   shortfall: ShortfallResult; // { hasShortfall, savingsBucketAmount, investmentContribution, gap }
   mode: "terpisah" | "kombinasi";
   recommendationMissing?: boolean; // kombinasi tanpa rekomendasi tersimpan
+  savingsProjection?: SavingsProjection | null; // proyeksi target tabungan opsional (Req 12.5–12.9)
   onRestart?: () => void;
 }
 
@@ -43,6 +49,16 @@ function formatPercent(percentage: number): string {
   return `${rounded.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`;
 }
 
+/** Format tahun (id-ID) dengan 1 desimal, untuk tampilan "~Y tahun". */
+function formatYears(years: number): string {
+  return years.toLocaleString("id-ID", { maximumFractionDigits: 1 });
+}
+
+/** Bulan dibulatkan ke atas ke bilangan bulat untuk tampilan "~X bulan". */
+function formatMonths(months: number): string {
+  return Math.ceil(months).toLocaleString("id-ID");
+}
+
 /**
  * BudgetResultCard — menampilkan Budget_Breakdown hasil perhitungan (Req 8.1–8.6).
  *
@@ -60,6 +76,7 @@ export default function BudgetResultCard({
   shortfall,
   mode,
   recommendationMissing = false,
+  savingsProjection,
   onRestart,
 }: BudgetResultCardProps) {
   const { presetId, baseAmount, lines } = breakdown;
@@ -198,6 +215,105 @@ export default function BudgetResultCard({
               cukup mendanai tujuan investasi Anda — pertimbangkan menaikkan jumlah dasar, memilih preset
               dengan porsi tabungan lebih besar, atau menyesuaikan target investasi.
             </p>
+          </div>
+        )}
+
+        {/* Panel Savings_Projection opsional (Req 12.5–12.9) */}
+        {savingsProjection && (
+          <div className="flex flex-col gap-3">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+              <Target className="h-4 w-4 text-[var(--accent)]" />
+              Proyeksi target tabungan
+            </span>
+
+            {savingsProjection.reachable === false ? (
+              /* Zero-saving / target tak akan tercapai — jangan render Infinity */
+              <div className="flex items-start gap-2.5 rounded-xl border border-amber-400 bg-amber-50 px-4 py-3.5">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <p className="text-xs leading-relaxed text-amber-800">
+                  Target tabungan{" "}
+                  <span className="font-semibold">
+                    {formatRupiah(savingsProjection.targetAmount)}
+                  </span>{" "}
+                  tidak akan tercapai dengan alokasi saat ini. Naikkan porsi alokasi
+                  tabungan (pilih preset dengan Savings_Bucket lebih besar atau tambah
+                  jumlah dasar) agar target dapat tercapai.
+                </p>
+              </div>
+            ) : savingsProjection.direction === "time-to-goal" &&
+              savingsProjection.months !== null ? (
+              /* Arah A — Time_To_Goal */
+              <div className="flex items-start gap-2.5 rounded-xl border border-border bg-background px-4 py-3.5">
+                <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
+                <p className="text-xs leading-relaxed text-muted">
+                  Target{" "}
+                  <span className="font-semibold text-foreground">
+                    {formatRupiah(savingsProjection.targetAmount)}
+                  </span>{" "}
+                  tercapai dalam{" "}
+                  <span className="font-semibold text-foreground">
+                    ~{formatMonths(savingsProjection.months)} bulan
+                  </span>
+                  {savingsProjection.years !== null && (
+                    <>
+                      {" "}
+                      (~{formatYears(savingsProjection.years)} tahun)
+                    </>
+                  )}
+                  {savingsProjection.annualReturn > 0 && (
+                    <span className="text-[11px]">
+                      {" "}
+                      · mengasumsikan pertumbuhan investasi
+                    </span>
+                  )}
+                  .
+                </p>
+              </div>
+            ) : savingsProjection.direction === "required-monthly" &&
+              savingsProjection.requiredMonthly !== null ? (
+              /* Arah B — Required_Monthly_Saving */
+              <div className="flex flex-col gap-2.5 rounded-xl border border-border bg-background px-4 py-3.5">
+                <p className="flex items-start gap-2.5 text-xs leading-relaxed text-muted">
+                  <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
+                  <span>
+                    Butuh{" "}
+                    <span className="font-semibold text-foreground">
+                      {formatRupiah(savingsProjection.requiredMonthly)}/bulan
+                    </span>{" "}
+                    untuk mencapai{" "}
+                    <span className="font-semibold text-foreground">
+                      {formatRupiah(savingsProjection.targetAmount)}
+                    </span>
+                    {savingsProjection.horizonYears !== null && (
+                      <>
+                        {" "}
+                        dalam {formatYears(savingsProjection.horizonYears)} tahun
+                      </>
+                    )}
+                    {savingsProjection.annualReturn > 0 && (
+                      <span className="text-[11px]">
+                        {" "}
+                        · mengasumsikan pertumbuhan investasi
+                      </span>
+                    )}
+                    .
+                  </span>
+                </p>
+
+                {savingsProjection.allocationSufficient ? (
+                  <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-green-400 bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    Alokasi preset cukup
+                  </span>
+                ) : (
+                  <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-amber-400 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Alokasi preset kurang{" "}
+                    {formatRupiah(savingsProjection.monthlyGap ?? 0)}/bulan
+                  </span>
+                )}
+              </div>
+            ) : null}
           </div>
         )}
 

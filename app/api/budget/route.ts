@@ -7,7 +7,11 @@ import {
   savingsBucketAmount,
   evaluateShortfall,
 } from "@/lib/planner/budget";
-import type { PresetId, SavingsMode } from "@/types/planner";
+import {
+  monthsToReachTarget,
+  requiredMonthlySaving,
+} from "@/lib/planner/savingsProjection";
+import type { PresetId, SavingsMode, SavingsProjection } from "@/types/planner";
 
 export const runtime = "nodejs";
 
@@ -19,6 +23,8 @@ interface BudgetBody {
   baseAmount?: unknown;
   mode?: unknown;
   manualSavingsTarget?: unknown;
+  savingsTargetAmount?: unknown;
+  savingsHorizonYears?: unknown;
   userId?: string | null;
 }
 
@@ -73,12 +79,20 @@ export async function GET() {
  *      mode terpisah: investmentContribution = 0.
  *   4. evaluateShortfall(savings, investmentContribution) → shortfall.
  *   5. Persist BudgetPlan (snapshot investmentContribution di kombinasi).
- *   6. Sukses → 200 { breakdown, savingsBucketAmount, investmentContribution,
- *      manualSavingsTarget, shortfall, recommendationMissing? }.
+ *   6. Proyeksi target tabungan opsional (bila savingsTargetAmount diberikan):
+ *      Growth_Rate = annualReturn rekomendasi (kombinasi) / 0 (terpisah).
+ *      Tanpa horizon → Arah A (monthsToReachTarget); dengan horizon → Arah B
+ *      (requiredMonthlySaving + banding savingsBucketAmount). Susun
+ *      savingsProjection (null bila target tak diisi). Req 11.2–11.8, 12.2–12.8.
+ *   7. Persist BudgetPlan (snapshot investmentContribution di kombinasi;
+ *      savingsTargetAmount/savingsHorizonYears bila ada).
+ *   8. Sukses → 200 { breakdown, savingsBucketAmount, investmentContribution,
+ *      manualSavingsTarget, shortfall, savingsProjection, recommendationMissing? }.
  *
  * Error mesin (input tidak valid) → 400; error DB → 500 (pesan ramah, Req 7.5).
  *
- * Requirements: 2.2, 2.3, 3.7, 4.1, 5.2, 5.3, 5.4, 5.5, 6.1, 7.1, 7.2, 7.5
+ * Requirements: 2.2, 2.3, 3.7, 4.1, 5.2, 5.3, 5.4, 5.5, 6.1, 7.1, 7.2, 7.5,
+ *   11.2, 11.3, 11.4, 11.5, 11.7, 11.8, 12.2, 12.3, 12.4, 12.6, 12.7, 12.8
  */
 export async function POST(req: Request) {
   let body: BudgetBody;
@@ -93,6 +107,8 @@ export async function POST(req: Request) {
     baseAmount,
     mode,
     manualSavingsTarget = null,
+    savingsTargetAmount = null,
+    savingsHorizonYears = null,
     userId = null,
   } = body ?? {};
 
@@ -131,10 +147,41 @@ export async function POST(req: Request) {
     );
   }
 
+  // Validasi field proyeksi opsional (hanya bila diberikan/non-null). Req 11.7, 11.8.
+  if (
+    savingsTargetAmount !== null &&
+    savingsTargetAmount !== undefined &&
+    (typeof savingsTargetAmount !== "number" ||
+      !Number.isFinite(savingsTargetAmount) ||
+      savingsTargetAmount <= 0)
+  ) {
+    return NextResponse.json(
+      { error: "Target tabungan harus berupa angka lebih besar dari nol." },
+      { status: 400 },
+    );
+  }
+
+  if (
+    savingsHorizonYears !== null &&
+    savingsHorizonYears !== undefined &&
+    (typeof savingsHorizonYears !== "number" ||
+      !Number.isInteger(savingsHorizonYears) ||
+      savingsHorizonYears <= 0)
+  ) {
+    return NextResponse.json(
+      { error: "Jangka waktu tabungan harus berupa bilangan bulat tahun yang lebih besar dari nol." },
+      { status: 400 },
+    );
+  }
+
   const presetIdValue = presetId as PresetId;
   const modeValue = mode as SavingsMode;
   const manualSavingsTargetValue =
     typeof manualSavingsTarget === "number" ? manualSavingsTarget : null;
+  const savingsTargetAmountValue =
+    typeof savingsTargetAmount === "number" ? savingsTargetAmount : null;
+  const savingsHorizonYearsValue =
+    typeof savingsHorizonYears === "number" ? savingsHorizonYears : null;
 
   // 2. Mesin penganggaran (pure functions). Error input → 400.
   let breakdown;
@@ -150,8 +197,9 @@ export async function POST(req: Request) {
     );
   }
 
-  // 3. Tentukan Investment_Contribution berdasarkan mode.
+  // 3. Tentukan Investment_Contribution + Growth_Rate berdasarkan mode.
   let investmentContribution = 0;
+  let growthRate = 0; // annualReturn dipakai proyeksi (0 di terpisah / tanpa rekomendasi).
   let recommendationMissing = false;
 
   try {
@@ -160,6 +208,7 @@ export async function POST(req: Request) {
         orderBy: { createdAt: "desc" },
       });
       investmentContribution = rec?.monthlyContribution ?? 0;
+      growthRate = rec?.annualReturn ?? 0;
       recommendationMissing = rec === null;
     }
   } catch (err) {
@@ -173,7 +222,63 @@ export async function POST(req: Request) {
   // 4. Evaluasi Savings_Shortfall.
   const shortfall = evaluateShortfall(savings, investmentContribution);
 
-  // 5. Persist BudgetPlan (snapshot investmentContribution di kombinasi). Error DB → 500.
+  // 5. Proyeksi target tabungan opsional. Monthly_Saving_Rate = savingsBucketAmount.
+  const monthlySavingRate = savings;
+  let savingsProjection: SavingsProjection | null = null;
+  try {
+    if (savingsTargetAmountValue !== null) {
+      if (savingsHorizonYearsValue === null) {
+        // Arah A (Time_To_Goal): target tanpa horizon.
+        const result = monthsToReachTarget({
+          targetAmount: savingsTargetAmountValue,
+          monthlySaving: monthlySavingRate,
+          annualReturn: growthRate,
+        });
+        savingsProjection = {
+          direction: "time-to-goal",
+          targetAmount: savingsTargetAmountValue,
+          horizonYears: null,
+          monthlySavingRate,
+          annualReturn: growthRate,
+          reachable: result.reachable,
+          months: result.months,
+          years: result.months === null ? null : result.months / 12,
+          requiredMonthly: null,
+          allocationSufficient: null,
+          monthlyGap: null,
+        };
+      } else {
+        // Arah B (Required_Monthly_Saving): target + horizon.
+        const requiredMonthly = requiredMonthlySaving({
+          targetAmount: savingsTargetAmountValue,
+          horizonYears: savingsHorizonYearsValue,
+          annualReturn: growthRate,
+        });
+        savingsProjection = {
+          direction: "required-monthly",
+          targetAmount: savingsTargetAmountValue,
+          horizonYears: savingsHorizonYearsValue,
+          monthlySavingRate,
+          annualReturn: growthRate,
+          reachable: true,
+          months: null,
+          years: null,
+          requiredMonthly,
+          allocationSufficient: monthlySavingRate >= requiredMonthly,
+          monthlyGap: Math.max(0, requiredMonthly - monthlySavingRate),
+        };
+      }
+    }
+  } catch (err) {
+    // Sudah divalidasi di atas; guard sebagai jaring pengaman → 400.
+    console.error("[budget] input proyeksi tabungan tidak valid:", err);
+    return NextResponse.json(
+      { error: "Data untuk menghitung proyeksi tabungan tidak valid." },
+      { status: 400 },
+    );
+  }
+
+  // 6. Persist BudgetPlan (snapshot investmentContribution di kombinasi). Error DB → 500.
   try {
     await prisma.budgetPlan.create({
       data: {
@@ -183,6 +288,8 @@ export async function POST(req: Request) {
         mode: modeValue,
         manualSavingsTarget: manualSavingsTargetValue,
         investmentContribution: modeValue === "kombinasi" ? investmentContribution : null,
+        savingsTargetAmount: savingsTargetAmountValue ?? null,
+        savingsHorizonYears: savingsHorizonYearsValue ?? null,
         breakdown: breakdown.lines as unknown as Prisma.InputJsonValue,
       },
     });
@@ -194,7 +301,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // 6. Sukses.
+  // 7. Sukses.
   return NextResponse.json(
     {
       breakdown,
@@ -202,6 +309,7 @@ export async function POST(req: Request) {
       investmentContribution,
       manualSavingsTarget: manualSavingsTargetValue,
       shortfall,
+      savingsProjection,
       ...(modeValue === "kombinasi" ? { recommendationMissing } : {}),
     },
     { status: 200 },

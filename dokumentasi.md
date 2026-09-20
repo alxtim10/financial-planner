@@ -150,18 +150,23 @@ Chatbot Gemini yang ada tetap sama secara logika (`POST /api/chat`, `lib/prompt.
 
 Bagian ini adalah arah setelah MVP. Fondasinya sudah disiapkan agar mudah dibangun tanpa duplikasi.
 
-### 5.1 Planner — Budget Planner (sudah di-spec, belum diimplementasikan)
-Cakupan **Planner** kini sudah memiliki spesifikasi formal di `.kiro/specs/budget-planner/` (requirements, design, tasks). **Status: spec siap, implementasi belum dikerjakan.**
+### 5.1 Planner — Budget Planner (terimplementasi; proyeksi target tabungan sebagai tambahan)
+Cakupan **Planner** memiliki spesifikasi formal di `.kiro/specs/budget-planner/` (requirements, design, tasks). **Status: alokasi anggaran inti sudah diimplementasikan (build hijau); kapabilitas tambahan _proyeksi target tabungan opsional_ (Requirements 11–12) baru di-spec dan siap dikerjakan sebagai delta di atas implementasi yang ada.**
 
 Keputusan cakupan yang sudah diputuskan:
 - **Fokus penganggaran alokasi (allocation budgeting) saja** — membagi pemasukan bulanan ke pos-pos menurut persentase preset. **Pencatatan transaksi harian dan pelacakan cash-flow tetap menjadi roadmap** (di luar iterasi ini).
 - **Metode preset** (bukan kategori kustom penuh), tepat 3 preset: **50/30/20** (Kebutuhan 50% / Keinginan 30% / Tabungan & Investasi 20%), **70/20/10** (Kebutuhan 70% / Tabungan 20% / Keinginan 10%), dan **80/20** (Pengeluaran 80% / Tabungan 20%).
 - **Jumlah dasar (Base_Amount)** default dari `income` `FinancialProfile` terbaru, dapat ditimpa manual.
 - **Mode target tabungan:** `terpisah` (target manual, independen) atau `kombinasi` (menarik `monthlyContribution` dari `InvestmentRecommendation` terbaru sebagai pos "Investasi" otomatis di dalam ember tabungan, plus target manual opsional). Mode `kombinasi` **menandai kekurangan dana (shortfall)** bila alokasi tabungan preset lebih kecil dari kontribusi investasi yang diperlukan.
-- **Persistensi** ke model Prisma baru `BudgetPlan` (presetId, baseAmount, mode, manualSavingsTarget?, investmentContribution?, breakdown Json), dengan endpoint `GET`/`POST /api/budget`. Ditambahkan lewat migrasi tambahan (tanpa reset DB).
-- **Reuse pola yang ada:** `Profile_Gate` (gate wajib), Prisma singleton (`lib/db.ts`), pure function terisolasi di `lib/planner/*` (`presets.ts`, `budget.ts`) diuji dengan PBT (`fast-check`), pola visual `RecommendationCard`, dan token warna Miami blue.
+- **Proyeksi target tabungan opsional (tambahan, di atas alokasi):** pengguna dapat **opsional** mengisi nominal target tabungan (`Savings_Target_Amount`) dan **opsional** jangka waktunya (`Savings_Horizon`, tahun). Kehadiran field menentukan arah proyeksi secara adaptif:
+  - *Tanpa target* → Planner berperilaku alokasi saja (tanpa perubahan).
+  - *Target tanpa jangka waktu* → **Arah A (waktu tercapai):** estimasi "tercapai dalam ~X bulan (~Y tahun)".
+  - *Target + jangka waktu* → **Arah B (tabungan bulanan diperlukan):** hitung tabungan bulanan yang diperlukan, lalu bandingkan dengan alokasi tabungan preset dan tandai cukup/kurang.
+  Laju tabungan yang dipakai adalah alokasi `Savings_Bucket` preset per bulan. Metode menyesuaikan mode: **`terpisah`** tanpa bunga (akumulasi murni dari 0); **`kombinasi`** berbasis pertumbuhan memakai `annualReturn` rekomendasi terbaru (Future Value of Annuity, 0/none → jatuh ke tanpa bunga). Hasil ditampilkan apa adanya termasuk nilai besar; **pengecualian:** bila laju tabungan efektif nol tanpa pertumbuhan, status menjadi "tidak akan tercapai dengan alokasi saat ini" (bukan nilai tak hingga). Logika proyeksi murni ada di `lib/planner/savingsProjection.ts`.
+- **Persistensi** ke model Prisma `BudgetPlan` (presetId, baseAmount, mode, manualSavingsTarget?, investmentContribution?, **savingsTargetAmount?, savingsHorizonYears?**, breakdown Json), dengan endpoint `GET`/`POST /api/budget`. Ditambahkan lewat migrasi tambahan (tanpa reset DB); field proyeksi ditambahkan lewat migrasi aditif nullable berikutnya.
+- **Reuse pola yang ada:** `Profile_Gate` (gate wajib), Prisma singleton (`lib/db.ts`), pure function terisolasi di `lib/planner/*` (`presets.ts`, `budget.ts`, `savingsProjection.ts`) diuji dengan PBT (`fast-check`), pola visual `RecommendationCard`, dan token warna Miami blue.
 
-**Kontrak data yang dikonsumsi:** nilai `monthlyContribution` dari `InvestmentRecommendation` menjadi pos investasi otomatis pada mode `kombinasi`.
+**Kontrak data yang dikonsumsi:** nilai `monthlyContribution` dari `InvestmentRecommendation` menjadi pos investasi otomatis pada mode `kombinasi`; `annualReturn` dipakai sebagai laju pertumbuhan proyeksi target tabungan pada mode `kombinasi`.
 
 **Sisa roadmap Planner:** pencatatan transaksi harian, cash-flow bulanan, kategori kustom, dan riwayat multi-anggaran.
 
@@ -184,7 +189,7 @@ Semua logika investasi berada di `lib/investment/*` sebagai **pure function** ya
 | `.kiro/specs/financial-planner/requirements.md` | Kebutuhan formal MVP cakupan Investasi (EARS). |
 | `.kiro/specs/financial-planner/design.md` | Desain teknis Investasi: matriks, properti korektnes, testing. |
 | `.kiro/specs/financial-planner/tasks.md` | Rencana implementasi Investasi (10 langkah, selesai). |
-| `.kiro/specs/budget-planner/requirements.md` | Kebutuhan formal cakupan Planner (EARS) — **spec siap, belum diimplementasikan**. |
-| `.kiro/specs/budget-planner/design.md` | Desain teknis Planner: preset, `computeBudget`/`evaluateShortfall`, model `BudgetPlan`, properti korektnes, testing. |
-| `.kiro/specs/budget-planner/tasks.md` | Rencana implementasi Planner (migrasi `BudgetPlan` → logika murni → API → UI → checkpoint). |
+| `.kiro/specs/budget-planner/requirements.md` | Kebutuhan formal cakupan Planner (EARS) — alokasi (Req 1–10) terimplementasi + proyeksi target tabungan opsional (Req 11–12) sebagai delta. |
+| `.kiro/specs/budget-planner/design.md` | Desain teknis Planner: preset, `computeBudget`/`evaluateShortfall`, `savingsProjection` (FV annuity), model `BudgetPlan`, properti korektnes (1–9), testing. |
+| `.kiro/specs/budget-planner/tasks.md` | Rencana implementasi Planner: alokasi (Task 1–8, selesai) + delta proyeksi target tabungan (Task 9–14). |
 | `PRD.md`, `DESIGN.md`, `REQUIREMENTS.md`, `TASKS.md` | **Fitur chatbot pelengkap (fase PoC)** — lihat catatan pengarah di puncak masing-masing. |

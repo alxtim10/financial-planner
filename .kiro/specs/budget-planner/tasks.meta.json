@@ -198,6 +198,11 @@
         "executionId": "033feb25-e213-4d73-b195-921479ddda07",
         "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
         "timestamp": 1789929649494
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932237998
       }
     ],
     "3. Modul preset & perhitungan anggaran (TDD)": [
@@ -226,6 +231,146 @@
         "executionId": "033feb25-e213-4d73-b195-921479ddda07",
         "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
         "timestamp": 1789929641424
+      }
+    ],
+    "9. Migrasi Prisma aditif: field proyeksi pada `BudgetPlan`": [
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932245078
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932255815
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932339601
+      }
+    ],
+    "10. Tambah tipe proyeksi ke `types/planner.ts`": [
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932245107
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932256707
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932340097
+      }
+    ],
+    "11.1 Implementasikan `savingsProjection.ts` (impor tipe saja dari `@/types/planner`): `monthsToReachTarget({ targetAmount, monthlySaving, annualReturn })` (Arah A: tanpa bunga `ceil(target/monthlySaving)`; berpertumbuhan `n = ln(1 + target×i/monthlySaving)/ln(1+i)` lalu `ceil`; `monthlySaving<=0` tanpa pertumbuhan → `{ reachable:false, months:null }`) dan `requiredMonthlySaving({ targetAmount, horizonYears, annualReturn })` (Arah B: tanpa bunga `target/(horizon×12)`; berpertumbuhan `PMT = target×i/((1+i)^n − 1)`; clamp min 0). Pasang guard input (target berhingga>0, horizon bulat>0, annualReturn berhingga≥0, monthlySaving berhingga≥0).": [
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932245160
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932349868
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932452342
+      }
+    ],
+    "12.1 Tambahkan penerimaan & validasi field opsional `savingsTargetAmount` (bila ada: berhingga > 0 → 400 bila tidak) dan `savingsHorizonYears` (bila ada: `Number.isInteger` & > 0 → 400 bila tidak) di `app/api/budget/route.ts`. Pada mode `kombinasi`, ambil `annualReturn` dari `InvestmentRecommendation` terbaru (0 bila tak ada) sebagai `Growth_Rate`; mode `terpisah` → `Growth_Rate = 0`. Bila `savingsTargetAmount` ada, panggil `monthsToReachTarget` (Arah A, tanpa horizon) atau `requiredMonthlySaving` + banding `savingsBucketAmount` (Arah B, dengan horizon), susun objek `savingsProjection`; bila tidak ada → `savingsProjection: null`. Persist `savingsTargetAmount`/`savingsHorizonYears` ke `BudgetPlan`. Sertakan `savingsProjection` di respons 200.": [
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932245192
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932463093
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932664151
+      }
+    ],
+    "13.1 Extend `components/planner/BudgetForm.tsx`: tambahkan input opsional `Savings_Target_Amount` (Rupiah) dan `Savings_Horizon` (tahun) dengan hint Arah A vs B, validasi lapisan form (target diisi → > 0; horizon diisi → bilangan bulat > 0), dan teruskan `savingsTargetAmount`/`savingsHorizonYears` ke `onSubmit`. Perbarui `PlannerWizard.tsx` untuk mengirim field ini ke POST dan meneruskan `savingsProjection` ke hasil.": [
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932245220
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932679543
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932891932
+      }
+    ],
+    "13.2 Extend `components/planner/BudgetResultCard.tsx`: render panel `Savings_Projection` bila tidak null — Arah A \"tercapai dalam ~X bulan (~Y tahun)\"; Arah B \"butuh Rp .../bulan\" + badge alokasi preset cukup/kurang Rp ...; status \"tidak akan tercapai dengan alokasi saat ini\" saat `reachable=false`; nilai berhingga besar apa adanya. Pertahankan format Rupiah `Rp ${Math.round(v).toLocaleString(\"id-ID\")}` dan gaya Miami blue.": [
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932245242
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932676711
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932889083
+      }
+    ],
+    "14. Checkpoint delta — pastikan build & test hijau": [
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932245265
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932900937
+      },
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932979502
+      }
+    ],
+    "11. Modul proyeksi murni `lib/planner/savingsProjection.ts` (TDD)": [
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932452423
+      }
+    ],
+    "12. Extend API `POST /api/budget` — orkestrasi proyeksi": [
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932664210
+      }
+    ],
+    "13. Extend UI Planner — form & hasil proyeksi": [
+      {
+        "executionId": "13c47da0-c54b-457a-b294-1e45f1cd6728",
+        "chatSessionId": "sess_6411c250-b903-4eab-9120-29c1c6c8268c",
+        "timestamp": 1789932891993
       }
     ]
   }
