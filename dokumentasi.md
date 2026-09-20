@@ -146,12 +146,24 @@ Chatbot Gemini yang ada tetap sama secara logika (`POST /api/chat`, `lib/prompt.
 
 ---
 
-## 5. Roadmap (Belum Diimplementasikan)
+## 5. Roadmap & Cakupan Berikutnya
 
-Bagian ini adalah arah masa depan, bukan bagian MVP. Fondasinya sudah disiapkan agar mudah dibangun tanpa duplikasi.
+Bagian ini adalah arah setelah MVP. Fondasinya sudah disiapkan agar mudah dibangun tanpa duplikasi.
 
-### 5.1 Planner (penganggaran harian/bulanan)
-Penganggaran 50/30/20 terstruktur, pencatatan transaksi, dan cash-flow bulanan. **Kontrak data yang akan dikonsumsi:** nilai `monthlyContribution` dari `InvestmentRecommendation` menjadi salah satu pos anggaran otomatis (alokasi tabungan/investasi bulanan).
+### 5.1 Planner — Budget Planner (sudah di-spec, belum diimplementasikan)
+Cakupan **Planner** kini sudah memiliki spesifikasi formal di `.kiro/specs/budget-planner/` (requirements, design, tasks). **Status: spec siap, implementasi belum dikerjakan.**
+
+Keputusan cakupan yang sudah diputuskan:
+- **Fokus penganggaran alokasi (allocation budgeting) saja** — membagi pemasukan bulanan ke pos-pos menurut persentase preset. **Pencatatan transaksi harian dan pelacakan cash-flow tetap menjadi roadmap** (di luar iterasi ini).
+- **Metode preset** (bukan kategori kustom penuh), tepat 3 preset: **50/30/20** (Kebutuhan 50% / Keinginan 30% / Tabungan & Investasi 20%), **70/20/10** (Kebutuhan 70% / Tabungan 20% / Keinginan 10%), dan **80/20** (Pengeluaran 80% / Tabungan 20%).
+- **Jumlah dasar (Base_Amount)** default dari `income` `FinancialProfile` terbaru, dapat ditimpa manual.
+- **Mode target tabungan:** `terpisah` (target manual, independen) atau `kombinasi` (menarik `monthlyContribution` dari `InvestmentRecommendation` terbaru sebagai pos "Investasi" otomatis di dalam ember tabungan, plus target manual opsional). Mode `kombinasi` **menandai kekurangan dana (shortfall)** bila alokasi tabungan preset lebih kecil dari kontribusi investasi yang diperlukan.
+- **Persistensi** ke model Prisma baru `BudgetPlan` (presetId, baseAmount, mode, manualSavingsTarget?, investmentContribution?, breakdown Json), dengan endpoint `GET`/`POST /api/budget`. Ditambahkan lewat migrasi tambahan (tanpa reset DB).
+- **Reuse pola yang ada:** `Profile_Gate` (gate wajib), Prisma singleton (`lib/db.ts`), pure function terisolasi di `lib/planner/*` (`presets.ts`, `budget.ts`) diuji dengan PBT (`fast-check`), pola visual `RecommendationCard`, dan token warna Miami blue.
+
+**Kontrak data yang dikonsumsi:** nilai `monthlyContribution` dari `InvestmentRecommendation` menjadi pos investasi otomatis pada mode `kombinasi`.
+
+**Sisa roadmap Planner:** pencatatan transaksi harian, cash-flow bulanan, kategori kustom, dan riwayat multi-anggaran.
 
 ### 5.2 Integrasi Chatbot ke Data Pengguna
 Chatbot membaca konteks pengguna untuk konsultasi yang personal. **Kontrak data yang akan dikonsumsi:** `FinancialProfile` (income/expense/savings) + `InvestmentRecommendation` (komposisi, return, kontribusi bulanan) disuntikkan sebagai konteks ke prompt, sehingga jawaban chatbot selaras dengan rencana investasi pengguna.
@@ -160,7 +172,7 @@ Chatbot membaca konteks pengguna untuk konsultasi yang personal. **Kontrak data 
 Field `userId` (nullable) sudah ada di semua model sejak awal, sehingga penambahan auth tidak memerlukan migrasi skema besar.
 
 ### Prinsip ekstensibilitas
-Semua logika investasi berada di `lib/investment/*` sebagai **pure function** yang dapat diimpor independen (tanpa dependensi UI/API/DB). Ini memastikan Planner dan integrasi chatbot dapat memakai ulang mesin aturan dan kalkulator proyeksi.
+Semua logika investasi berada di `lib/investment/*` sebagai **pure function** yang dapat diimpor independen (tanpa dependensi UI/API/DB). Ini memastikan Planner dan integrasi chatbot dapat memakai ulang mesin aturan dan kalkulator proyeksi. Cakupan Planner mengikuti pola yang sama: logika penganggaran murni akan berada di `lib/planner/*` (`presets.ts`, `budget.ts`), hanya mengimpor tipe dari `@/types/planner`.
 
 ---
 
@@ -169,7 +181,10 @@ Semua logika investasi berada di `lib/investment/*` sebagai **pure function** ya
 | Dokumen | Isi |
 |---|---|
 | `dokumentasi.md` (ini) | Arah produk keseluruhan (otoritatif). |
-| `.kiro/specs/financial-planner/requirements.md` | Kebutuhan formal MVP (EARS). |
-| `.kiro/specs/financial-planner/design.md` | Desain teknis, matriks, properti korektnes, testing. |
-| `.kiro/specs/financial-planner/tasks.md` | Rencana implementasi 10 langkah. |
+| `.kiro/specs/financial-planner/requirements.md` | Kebutuhan formal MVP cakupan Investasi (EARS). |
+| `.kiro/specs/financial-planner/design.md` | Desain teknis Investasi: matriks, properti korektnes, testing. |
+| `.kiro/specs/financial-planner/tasks.md` | Rencana implementasi Investasi (10 langkah, selesai). |
+| `.kiro/specs/budget-planner/requirements.md` | Kebutuhan formal cakupan Planner (EARS) — **spec siap, belum diimplementasikan**. |
+| `.kiro/specs/budget-planner/design.md` | Desain teknis Planner: preset, `computeBudget`/`evaluateShortfall`, model `BudgetPlan`, properti korektnes, testing. |
+| `.kiro/specs/budget-planner/tasks.md` | Rencana implementasi Planner (migrasi `BudgetPlan` → logika murni → API → UI → checkpoint). |
 | `PRD.md`, `DESIGN.md`, `REQUIREMENTS.md`, `TASKS.md` | **Fitur chatbot pelengkap (fase PoC)** — lihat catatan pengarah di puncak masing-masing. |
