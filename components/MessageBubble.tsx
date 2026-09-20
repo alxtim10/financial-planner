@@ -25,7 +25,7 @@ export default function MessageBubble({ message, isPending }: MessageBubbleProps
   // Pesan model: mengalir tanpa bubble kaku, dengan avatar kecil (ala Gemini).
   return (
     <div className="flex w-full animate-fade-in-up gap-3">
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-[#b06bff]">
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)]">
         <Sparkles className="h-4 w-4 text-white" />
       </div>
       <div className="min-w-0 flex-1 pt-0.5">

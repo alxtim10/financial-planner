@@ -140,7 +140,7 @@ export default function ChatInterface() {
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-border/60 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-3xl items-center gap-2.5 px-4 py-3.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-[#b06bff]">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)]">
             <Sparkles className="h-4 w-4 text-white" />
           </div>
           <h1 className="text-[0.95rem] font-medium tracking-tight text-foreground">
@@ -218,7 +218,7 @@ function EmptyState({
   return (
     <div className="flex animate-fade-in flex-col items-center gap-8 py-16 text-center">
       <div className="flex flex-col items-center gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--accent)] to-[#b06bff] shadow-lg shadow-[var(--accent)]/20">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] shadow-lg shadow-[var(--accent)]/20">
           <Sparkles className="h-8 w-8 text-white" />
         </div>
         <div>
