@@ -3,13 +3,13 @@
 import { useState } from "react";
 import {
   Wallet,
-  PiggyBank,
   TrendingUp,
   Loader2,
   ArrowRight,
   Info,
   Target,
   CalendarClock,
+  PiggyBank,
 } from "lucide-react";
 import type { SavingsMode } from "@/types/planner";
 
@@ -17,11 +17,16 @@ import type { SavingsMode } from "@/types/planner";
 export interface BudgetFormValues {
   baseAmount: number;
   mode: SavingsMode;
-  manualSavingsTarget: number | null;
   /** Savings_Target_Amount (Rupiah); `null` bila field kosong (tanpa proyeksi). */
   savingsTargetAmount: number | null;
   /** Savings_Horizon (tahun); `null` bila field kosong. */
   savingsHorizonYears: number | null;
+  /**
+   * Include_Savings — sertakan `currentSavings` profil sebagai saldo awal
+   * proyeksi (Present_Value). Selalu `false` bila toggle tidak berlaku
+   * (target kosong atau `currentSavings` tidak > 0). Req 14.6.
+   */
+  includeSavings: boolean;
 }
 
 interface BudgetFormProps {
@@ -33,6 +38,12 @@ interface BudgetFormProps {
    * rekomendasi tersimpan.
    */
   investmentContribution?: number | null;
+  /**
+   * `currentSavings` dari `Financial_Profile` terbaru (Rupiah); `null`/`0`
+   * bila tak ada. Dipakai untuk menampilkan toggle Include_Savings beserta
+   * nominalnya (Req 14.6).
+   */
+  currentSavings?: number | null;
   /** Dipanggil dengan nilai terparsir saat form valid dan disubmit. */
   onSubmit: (values: BudgetFormValues) => void;
   /** Menonaktifkan tombol submit selama proses berlangsung. */
@@ -41,7 +52,6 @@ interface BudgetFormProps {
 
 type FieldKey =
   | "baseAmount"
-  | "manualSavingsTarget"
   | "savingsTargetAmount"
   | "savingsHorizonYears";
 type FieldErrors = Partial<Record<FieldKey, string>>;
@@ -62,16 +72,6 @@ function previewRupiah(raw: string): string | null {
 function validateBaseAmount(value: string): string | undefined {
   const trimmed = value.trim();
   if (trimmed === "") return "Wajib diisi.";
-  const n = Number(trimmed);
-  if (!Number.isFinite(n)) return "Harus berupa angka.";
-  if (n < 0) return "Tidak boleh negatif.";
-  return undefined;
-}
-
-/** Validasi Manual_Savings_Target: opsional, tapi bila diisi harus angka ≥ 0 (Req 5.2, 5.4). */
-function validateManualTarget(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (trimmed === "") return undefined;
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return "Harus berupa angka.";
   if (n < 0) return "Tidak boleh negatif.";
@@ -113,14 +113,16 @@ const MODES: { value: SavingsMode; label: string; hint: string }[] = [
 ];
 
 /**
- * BudgetForm — input Base_Amount, Savings_Mode, dan Manual_Savings_Target
- * (Req 2.1, 2.2, 5.1, 5.2, 5.4). Base_Amount diprefill dari profil dan dapat
- * ditimpa. Pada mode `kombinasi`, kontribusi investasi bulanan ditampilkan
- * read-only (Req 5.3); bila belum ada rekomendasi, pengguna diberi tahu (Req 5.5).
+ * BudgetForm — input Base_Amount, Savings_Mode, dan proyeksi target tabungan
+ * opsional (Savings_Target_Amount + Savings_Horizon). Base_Amount diprefill
+ * dari profil dan dapat ditimpa. Pada mode `kombinasi`, kontribusi investasi
+ * bulanan ditampilkan read-only (Req 5.3); bila belum ada rekomendasi, pengguna
+ * diberi tahu (Req 5.5).
  */
 export default function BudgetForm({
   defaultBaseAmount,
   investmentContribution,
+  currentSavings,
   onSubmit,
   submitting = false,
 }: BudgetFormProps) {
@@ -130,9 +132,9 @@ export default function BudgetForm({
       : ""
   );
   const [mode, setMode] = useState<SavingsMode>("terpisah");
-  const [manualSavingsTarget, setManualSavingsTarget] = useState("");
   const [savingsTargetAmount, setSavingsTargetAmount] = useState("");
   const [savingsHorizonYears, setSavingsHorizonYears] = useState("");
+  const [includeSavings, setIncludeSavings] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
 
   const contribution =
@@ -141,12 +143,19 @@ export default function BudgetForm({
       : 0;
   const hasContribution = contribution > 0;
 
+  // Nominal tabungan saat ini (Present_Value calon). Valid bila berhingga > 0.
+  const savings =
+    currentSavings != null && Number.isFinite(currentSavings)
+      ? currentSavings
+      : 0;
+  // Toggle Include_Savings hanya berlaku bila target diisi & currentSavings > 0
+  // (Req 14.6). Di luar kondisi ini, includeSavings selalu disubmit `false`.
+  const canIncludeSavings = savingsTargetAmount.trim() !== "" && savings > 0;
+
   function validateAll(): boolean {
     const next: FieldErrors = {};
     const baseErr = validateBaseAmount(baseAmount);
     if (baseErr) next.baseAmount = baseErr;
-    const targetErr = validateManualTarget(manualSavingsTarget);
-    if (targetErr) next.manualSavingsTarget = targetErr;
     const savingsTargetErr = validateSavingsTarget(savingsTargetAmount);
     if (savingsTargetErr) next.savingsTargetAmount = savingsTargetErr;
     const savingsHorizonErr = validateSavingsHorizon(savingsHorizonYears);
@@ -160,22 +169,21 @@ export default function BudgetForm({
     if (submitting) return;
     if (!validateAll()) return;
 
-    const parsedTarget = manualSavingsTarget.trim();
     const parsedSavingsTarget = savingsTargetAmount.trim();
     const parsedSavingsHorizon = savingsHorizonYears.trim();
     onSubmit({
       baseAmount: Number(baseAmount),
       mode,
-      manualSavingsTarget: parsedTarget === "" ? null : Number(parsedTarget),
       savingsTargetAmount:
         parsedSavingsTarget === "" ? null : Number(parsedSavingsTarget),
       savingsHorizonYears:
         parsedSavingsHorizon === "" ? null : Number(parsedSavingsHorizon),
+      // Coerce ke false bila toggle tidak berlaku (target kosong / savings ≤ 0).
+      includeSavings: canIncludeSavings ? includeSavings : false,
     });
   }
 
   const basePreview = previewRupiah(baseAmount);
-  const targetPreview = previewRupiah(manualSavingsTarget);
   const savingsTargetPreview = previewRupiah(savingsTargetAmount);
 
   return (
@@ -293,57 +301,6 @@ export default function BudgetForm({
           )}
         </div>
       )}
-
-      {/* Manual_Savings_Target (opsional) */}
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="manualSavingsTarget" className="text-sm font-medium text-foreground">
-          Target tabungan manual{" "}
-          <span className="font-normal text-muted">(opsional)</span>
-        </label>
-        <div
-          className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(0,180,216,0.12)] ${
-            errors.manualSavingsTarget
-              ? "border-red-400"
-              : "border-border focus-within:border-[var(--accent)]/50"
-          }`}
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
-            <PiggyBank className="h-4 w-4" />
-          </span>
-          <span className="shrink-0 text-sm text-muted">Rp</span>
-          <input
-            id="manualSavingsTarget"
-            name="manualSavingsTarget"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            step="any"
-            value={manualSavingsTarget}
-            onChange={(e) => {
-              setManualSavingsTarget(e.target.value);
-              if (errors.manualSavingsTarget)
-                setErrors((p) => ({ ...p, manualSavingsTarget: undefined }));
-            }}
-            placeholder="0"
-            aria-invalid={errors.manualSavingsTarget ? true : undefined}
-            aria-describedby={
-              errors.manualSavingsTarget
-                ? "manualSavingsTarget-error"
-                : "manualSavingsTarget-hint"
-            }
-            className="min-w-0 flex-1 bg-transparent text-[0.9375rem] text-foreground placeholder:text-muted focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          />
-        </div>
-        {errors.manualSavingsTarget ? (
-          <p id="manualSavingsTarget-error" className="text-xs text-red-500">
-            {errors.manualSavingsTarget}
-          </p>
-        ) : (
-          <p id="manualSavingsTarget-hint" className="text-xs text-muted">
-            {targetPreview ? targetPreview : "Isi bila ingin menetapkan target sendiri."}
-          </p>
-        )}
-      </div>
 
       {/* Proyeksi target tabungan (opsional) — Savings_Target_Amount & Savings_Horizon */}
       <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border bg-background/60 p-4">
@@ -471,6 +428,53 @@ export default function BudgetForm({
             </p>
           )}
         </div>
+
+        {/* Toggle Include_Savings — tampil hanya bila target diisi & currentSavings > 0 (Req 14.6) */}
+        {canIncludeSavings && (
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={includeSavings}
+              onClick={() => setIncludeSavings((v) => !v)}
+              className={`flex items-center gap-2.5 rounded-xl border px-3.5 py-3 text-left transition-all duration-200 ${
+                includeSavings
+                  ? "border-[var(--accent)] bg-accent-soft"
+                  : "border-border bg-background hover:border-[var(--accent)]/50"
+              }`}
+            >
+              <span
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                  includeSavings
+                    ? "bg-[var(--accent)] text-white"
+                    : "bg-accent-soft text-[var(--accent)]"
+                }`}
+              >
+                <PiggyBank className="h-4 w-4" />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-sm font-medium text-foreground">
+                  Sertakan tabungan saat ini ({formatRupiah(savings)})
+                </span>
+                <span className="text-xs leading-relaxed text-muted">
+                  Tabungan saat ini dihitung sebagai saldo awal proyeksi.
+                </span>
+              </span>
+              <span
+                className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${
+                  includeSavings ? "bg-[var(--accent)]" : "bg-border"
+                }`}
+                aria-hidden="true"
+              >
+                <span
+                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                    includeSavings ? "translate-x-[1.125rem]" : "translate-x-0.5"
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
+        )}
       </div>
 
       <button

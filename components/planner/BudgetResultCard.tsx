@@ -9,6 +9,7 @@ import {
   Target,
   CalendarClock,
   AlertTriangle,
+  CheckCircle2,
   RotateCcw,
 } from "lucide-react";
 import type {
@@ -21,7 +22,6 @@ interface BudgetResultCardProps {
   breakdown: BudgetBreakdown; // { presetId, baseAmount, lines: BudgetLine[] }
   savingsBucketAmount: number;
   investmentContribution: number; // 0 dalam mode terpisah
-  manualSavingsTarget?: number | null;
   shortfall: ShortfallResult; // { hasShortfall, savingsBucketAmount, investmentContribution, gap }
   mode: "terpisah" | "kombinasi";
   recommendationMissing?: boolean; // kombinasi tanpa rekomendasi tersimpan
@@ -72,7 +72,6 @@ export default function BudgetResultCard({
   breakdown,
   savingsBucketAmount,
   investmentContribution,
-  manualSavingsTarget,
   shortfall,
   mode,
   recommendationMissing = false,
@@ -81,10 +80,6 @@ export default function BudgetResultCard({
 }: BudgetResultCardProps) {
   const { presetId, baseAmount, lines } = breakdown;
   const isKombinasi = mode === "kombinasi";
-  const hasManualTarget =
-    manualSavingsTarget !== null &&
-    manualSavingsTarget !== undefined &&
-    Number.isFinite(manualSavingsTarget);
 
   return (
     <div className="flex flex-col gap-5">
@@ -178,17 +173,6 @@ export default function BudgetResultCard({
             </div>
           )}
 
-          {hasManualTarget && (
-            <div className="flex flex-col gap-1 rounded-xl border border-border bg-background px-4 py-3.5">
-              <span className="flex items-center gap-1.5 text-xs text-muted">
-                <Target className="h-3.5 w-3.5" />
-                Target tabungan manual
-              </span>
-              <span className="text-xl font-semibold text-foreground">
-                {formatRupiah(manualSavingsTarget as number)}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Info: rekomendasi investasi belum tersedia (kombinasi) */}
@@ -226,7 +210,23 @@ export default function BudgetResultCard({
               Proyeksi target tabungan
             </span>
 
-            {savingsProjection.reachable === false ? (
+            {savingsProjection.alreadyReached ? (
+              /* Sudah tercapai — PV >= target (Req 13.6); dahulukan sebelum cabang lain */
+              <div className="flex items-start gap-2.5 rounded-xl border border-green-400 bg-green-50 px-4 py-3.5">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+                <p className="text-xs leading-relaxed text-green-800">
+                  Target tabungan{" "}
+                  <span className="font-semibold">
+                    {formatRupiah(savingsProjection.targetAmount)}
+                  </span>{" "}
+                  sudah tercapai dari tabungan saat ini (
+                  <span className="font-semibold">
+                    {formatRupiah(savingsProjection.presentValue)}
+                  </span>
+                  ).
+                </p>
+              </div>
+            ) : savingsProjection.reachable === false ? (
               /* Zero-saving / target tak akan tercapai — jangan render Infinity */
               <div className="flex items-start gap-2.5 rounded-xl border border-amber-400 bg-amber-50 px-4 py-3.5">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -243,31 +243,43 @@ export default function BudgetResultCard({
             ) : savingsProjection.direction === "time-to-goal" &&
               savingsProjection.months !== null ? (
               /* Arah A — Time_To_Goal */
-              <div className="flex items-start gap-2.5 rounded-xl border border-border bg-background px-4 py-3.5">
-                <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
-                <p className="text-xs leading-relaxed text-muted">
-                  Target{" "}
-                  <span className="font-semibold text-foreground">
-                    {formatRupiah(savingsProjection.targetAmount)}
-                  </span>{" "}
-                  tercapai dalam{" "}
-                  <span className="font-semibold text-foreground">
-                    ~{formatMonths(savingsProjection.months)} bulan
-                  </span>
-                  {savingsProjection.years !== null && (
-                    <>
-                      {" "}
-                      (~{formatYears(savingsProjection.years)} tahun)
-                    </>
-                  )}
-                  {savingsProjection.annualReturn > 0 && (
-                    <span className="text-[11px]">
-                      {" "}
-                      · mengasumsikan pertumbuhan investasi
+              <div className="flex flex-col gap-2 rounded-xl border border-border bg-background px-4 py-3.5">
+                <p className="flex items-start gap-2.5 text-xs leading-relaxed text-muted">
+                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
+                  <span>
+                    Target{" "}
+                    <span className="font-semibold text-foreground">
+                      {formatRupiah(savingsProjection.targetAmount)}
+                    </span>{" "}
+                    tercapai dalam{" "}
+                    <span className="font-semibold text-foreground">
+                      ~{formatMonths(savingsProjection.months)} bulan
                     </span>
-                  )}
-                  .
+                    {savingsProjection.years !== null && (
+                      <>
+                        {" "}
+                        (~{formatYears(savingsProjection.years)} tahun)
+                      </>
+                    )}
+                    {savingsProjection.annualReturn > 0 && (
+                      <span className="text-[11px]">
+                        {" "}
+                        · mengasumsikan pertumbuhan investasi
+                      </span>
+                    )}
+                    .
+                  </span>
                 </p>
+
+                {savingsProjection.includeSavings && (
+                  <p className="pl-6.5 text-[11px] leading-relaxed text-muted">
+                    Termasuk tabungan saat ini{" "}
+                    <span className="font-medium text-foreground">
+                      {formatRupiah(savingsProjection.presentValue)}
+                    </span>{" "}
+                    sebagai saldo awal.
+                  </p>
+                )}
               </div>
             ) : savingsProjection.direction === "required-monthly" &&
               savingsProjection.requiredMonthly !== null ? (
@@ -311,6 +323,16 @@ export default function BudgetResultCard({
                     Alokasi preset kurang{" "}
                     {formatRupiah(savingsProjection.monthlyGap ?? 0)}/bulan
                   </span>
+                )}
+
+                {savingsProjection.includeSavings && (
+                  <p className="pl-6.5 text-[11px] leading-relaxed text-muted">
+                    Termasuk tabungan saat ini{" "}
+                    <span className="font-medium text-foreground">
+                      {formatRupiah(savingsProjection.presentValue)}
+                    </span>{" "}
+                    sebagai saldo awal.
+                  </p>
                 )}
               </div>
             ) : null}

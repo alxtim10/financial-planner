@@ -8,27 +8,31 @@
 import type {
   BudgetBreakdown,
   BudgetLine,
+  BudgetPreset,
   PresetId,
   ShortfallResult,
 } from "@/types/planner";
 import { getPreset } from "@/lib/planner/presets";
 
 /**
- * Menghitung `Budget_Breakdown` dari `baseAmount` dan preset terpilih.
+ * Menghitung `Budget_Breakdown` dari `baseAmount` dan sebuah `BudgetPreset`
+ * apa pun (preset tetap maupun `Custom_Preset` hasil `buildCustomPreset`).
+ * Ini generalisasi dari `computeBudget` (DIUBAH Delta 3, Req 15.5, 15.6).
  *
  * Untuk setiap kategori preset, `amount = baseAmount * percentage / 100`
- * (Req 4.2). Karena persentase preset berjumlah 100 (Req 3.5), jumlah seluruh
- * `lines[].amount` sama dengan `baseAmount` secara eksak dalam aritmetika riil;
- * amount SENGAJA tidak dibulatkan di sini agar total tetap presisi — pembulatan
- * Rupiah hanya dilakukan di lapisan tampilan (Req 4.2, 4.3).
+ * (Req 4.2). Karena persentase preset berjumlah 100 (preset tetap Req 3.5;
+ * Custom_Allocation dijamin berjumlah 100 oleh guard `buildCustomPreset`),
+ * jumlah seluruh `lines[].amount` sama dengan `baseAmount` secara eksak dalam
+ * aritmetika riil; amount SENGAJA tidak dibulatkan di sini agar total tetap
+ * presisi — pembulatan Rupiah hanya dilakukan di lapisan tampilan (Req 4.2, 4.3).
+ * `breakdown.presetId` mengambil `preset.id` (jadi `"custom"` untuk custom).
  *
  * Guard (Req 4.5): melempar Error bila `baseAmount` bukan angka berhingga yang
- * tidak negatif (negatif, `NaN`, atau tak hingga). Preset id yang tidak dikenal
- * ditolak melalui `getPreset`, yang melempar Error (Req 3.7).
+ * tidak negatif (negatif, `NaN`, atau tak hingga).
  */
-export function computeBudget(
+export function computeBudgetFromPreset(
   baseAmount: number,
-  presetId: PresetId
+  preset: BudgetPreset
 ): BudgetBreakdown {
   if (!Number.isFinite(baseAmount) || baseAmount < 0) {
     throw new Error(
@@ -38,9 +42,6 @@ export function computeBudget(
     );
   }
 
-  // Melempar Error bila presetId tidak dikenal (Req 3.7).
-  const preset = getPreset(presetId);
-
   const lines: BudgetLine[] = preset.categories.map((category) => ({
     name: category.name,
     percentage: category.percentage,
@@ -49,10 +50,34 @@ export function computeBudget(
   }));
 
   return {
-    presetId,
+    presetId: preset.id,
     baseAmount,
     lines,
   };
+}
+
+/**
+ * Menghitung `Budget_Breakdown` dari `baseAmount` dan preset TETAP terpilih.
+ *
+ * DIUBAH (Delta 3, Req 15.9): kini mendelegasi ke `computeBudgetFromPreset`
+ * setelah menyelesaikan preset tetap via `getPreset(presetId)`. Perilaku untuk
+ * tiga preset tetap TIDAK berubah (output breakdown identik). Preset id yang
+ * tidak dikenal — termasuk `"custom"` — ditolak melalui `getPreset`, yang
+ * melempar Error (Req 3.7); jalur custom TIDAK melewati fungsi ini melainkan
+ * memanggil `computeBudgetFromPreset` langsung dengan preset dari
+ * `buildCustomPreset`.
+ *
+ * Guard (Req 4.5): `baseAmount` harus angka berhingga yang tidak negatif —
+ * dijaga di `computeBudgetFromPreset` yang menjadi tujuan delegasi.
+ */
+export function computeBudget(
+  baseAmount: number,
+  presetId: PresetId
+): BudgetBreakdown {
+  // Melempar Error bila presetId tidak dikenal / "custom" (Req 3.7, 15.9).
+  const preset = getPreset(presetId);
+
+  return computeBudgetFromPreset(baseAmount, preset);
 }
 
 /**

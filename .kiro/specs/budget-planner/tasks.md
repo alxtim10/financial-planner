@@ -120,6 +120,102 @@ Rencana implementasi menambahkan cakupan **Planner** (penganggaran alokasi berba
 - [x] 14. Checkpoint delta — pastikan build & test hijau
   - Jalankan `npm run build` (harus bersih) dan `npm test` (logika `savingsProjection` + suite lama hijau). Pastikan semua test lulus; tanyakan ke pengguna bila muncul pertanyaan.
 
+## Delta 2: Opsi Sertakan Tabungan Saat Ini / Present Value (Requirements 13–14)
+
+> **Catatan penting.** Task 1–14 di atas **sudah selesai** dan build hijau. Task 15–20 berikut adalah **penambahan inkremental** di atas proyeksi target tabungan yang sudah ada — menambah parameter `presentValue` opsional (default 0) dan toggle `Include_Savings`, tanpa menulis ulang. Default toggle **mati** → perilaku from-zero yang sudah teruji tetap identik (dijaga Property 10). Urutan: migrasi aditif → tipe → logika murni (TDD) → API → UI → checkpoint. Sub-task bertanda `*` bersifat opsional (test).
+
+- [ ] 15. Migrasi Prisma aditif: field `includeSavings` pada `BudgetPlan`
+  - Tambahkan satu field **nullable** ke model `BudgetPlan` di `prisma/schema.prisma`: `includeSavings Boolean?`. **JANGAN** ubah kolom lain.
+  - Jalankan migrasi tambahan `prisma migrate dev --name add_include_savings` (aditif; **JANGAN** reset DB — data `BudgetPlan`/Investasi harus tetap ada). Bila migrasi gagal karena izin/koneksi, laporkan ke pengguna dan tanyakan alih-alih memaksa.
+  - Regenerasi Prisma Client.
+  - _Requirements: 14.3_
+
+- [ ] 16. Extend tipe proyeksi di `types/planner.ts` (present value)
+  - Tambahkan (tanpa menghapus field lama): pada `MonthsToReachResult` tambahkan `alreadyReached: boolean`; pada `SavingsProjection` tambahkan `includeSavings: boolean`, `presentValue: number`, `alreadyReached: boolean`.
+  - _Requirements: 13.6, 14.4_
+
+- [ ] 17. Extend modul murni `lib/planner/savingsProjection.ts` — parameter `presentValue` (TDD)
+  - [ ] 17.1 Tambahkan parameter opsional `presentValue?: number` (default 0) ke `monthsToReachTarget` dan `requiredMonthlySaving`. Terapkan rumus PV-aware: cek awal `PV >= targetAmount` → Arah A `{ reachable:true, months:0, alreadyReached:true }`, Arah B `0`. Arah A tanpa bunga `ceil(max(0, target − PV)/monthlySaving)`; dengan bunga `n = ln((target·i + monthlySaving)/(PV·i + monthlySaving))/ln(1+i)`. Arah B tanpa bunga `(target − PV)/n`; dengan bunga `PMT = (target − PV·(1+i)^n)·i/((1+i)^n − 1)`, clamp min 0. Pertahankan cabang laju-nol tanpa pertumbuhan (`monthlySaving<=0` & `PV<target`) → `{ reachable:false, months:null, alreadyReached:false }`. Tambahkan guard `presentValue` berhingga ≥ 0. Set `alreadyReached:false` pada hasil non-already-reached agar tipe konsisten.
+    - _Requirements: 13.2, 13.4, 13.5, 13.6, 13.7, 13.8, 13.9_
+  - [ ]* 17.2 Property test: `presentValue = 0` mereproduksi hasil from-zero (ekuivalensi terhadap perilaku lama).
+    - **Feature: budget-planner, Property 10: presentValue = 0 mereproduksi hasil from-zero (ekuivalensi)**
+    - **Validates: Requirements 13.2**
+  - [ ]* 17.3 Property test: Required_Monthly_Saving dengan saldo awal mencapai target (round-trip FV annuity + PV).
+    - **Feature: budget-planner, Property 11: Required_Monthly_Saving dengan saldo awal mencapai target (round-trip FV annuity + PV)**
+    - **Validates: Requirements 13.5**
+  - [ ]* 17.4 Property test: konsistensi Time_To_Goal dengan saldo awal (`months` batas naik/turun akumulasi + PV).
+    - **Feature: budget-planner, Property 12: Konsistensi Time_To_Goal dengan saldo awal (monthsToReachTarget + PV)**
+    - **Validates: Requirements 13.4**
+  - [ ]* 17.5 Property test: `presentValue ≥ target` → sudah tercapai (Arah A `months 0`/`alreadyReached`; Arah B `0`).
+    - **Feature: budget-planner, Property 13: presentValue ≥ target → sudah tercapai (Arah A & B)**
+    - **Validates: Requirements 13.6**
+  - [ ]* 17.6 Property test: guard `presentValue` tidak valid ditolak (perluasan Property 9: presentValue bukan berhingga ≥ 0 → throw).
+    - **Feature: budget-planner, Property 9: Input proyeksi tidak valid ditolak**
+    - **Validates: Requirements 13.9**
+
+- [ ] 18. Extend API `/api/budget` — orkestrasi present value
+  - [ ] 18.1 Extend `GET /api/budget`: sertakan `currentSavings = profile?.currentSavings ?? null` pada respons di samping `defaultBaseAmount`.
+    - _Requirements: 14.5_
+  - [ ] 18.2 Extend `POST /api/budget`: terima field opsional `includeSavings` (boolean, default `false`). Bila `savingsTargetAmount` ada, hitung `presentValue = includeSavings ? (profile?.currentSavings ?? 0) : 0` (reuse profil yang sudah diambil), teruskan `presentValue` ke `monthsToReachTarget`/`requiredMonthlySaving`; sertakan `includeSavings`, `presentValue`, `alreadyReached` pada objek `savingsProjection`; persist `includeSavings` ke `BudgetPlan`. Tangani `includeSavings` secara defensif meski tanpa target (diabaikan bila `savingsProjection` null).
+    - _Requirements: 14.1, 14.2, 14.3, 14.4_
+  - [ ]* 18.3 Integration test: `includeSavings=true` memakai `currentSavings` sbg PV (proyeksi memperhitungkan saldo awal); `false`/tanpa → PV 0 (identik from-zero); `PV ≥ target` → `alreadyReached true`; persist `includeSavings` (ada vs NULL); `GET` kembalikan `currentSavings`.
+    - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5_
+
+- [ ] 19. Extend UI Planner — toggle Include_Savings & tampilan hasil
+  - [ ] 19.1 Extend `PlannerWizard.tsx`: baca `currentSavings` dari respons `GET /api/budget`, teruskan ke `BudgetForm`; kirim `includeSavings` pada body `POST`. Extend `BudgetForm.tsx`: tambahkan toggle/checkbox "Sertakan tabungan saat ini (Rp …)" yang tampil **hanya** saat `Savings_Target_Amount` diisi & `currentSavings > 0`, default tidak dicentang, teruskan `includeSavings` ke `onSubmit`.
+    - _Requirements: 14.6_
+  - [ ] 19.2 Extend `BudgetResultCard.tsx`: bila `savingsProjection.includeSavings`, tampilkan catatan "termasuk tabungan saat ini Rp … sebagai saldo awal"; bila `savingsProjection.alreadyReached`, tampilkan status "sudah tercapai" (Arah A/B) alih-alih perhitungan biasa; selain itu Arah A/B mencerminkan sisa target yang berkurang. Pertahankan format Rupiah & gaya Miami blue.
+    - _Requirements: 13.6, 14.7_
+  - [ ]* 19.3 Component test: toggle `Include_Savings` muncul saat target diisi & `currentSavings>0` (dan tidak muncul sebaliknya); `BudgetResultCard` menampilkan catatan saldo awal saat `includeSavings` dan status "sudah tercapai" saat `alreadyReached`.
+    - _Requirements: 14.6, 14.7_
+
+- [ ] 20. Checkpoint delta 2 — pastikan build & test hijau
+  - Jalankan `npm run build` (harus bersih) dan `npm test` (logika `savingsProjection` PV-aware + suite lama hijau). Pastikan semua test lulus; tanyakan ke pengguna bila muncul pertanyaan.
+
+## Delta 3: Preset Penganggaran Kustom / Custom (Requirements 15–16)
+
+> **Catatan penting.** Task 1–20 di atas adalah iterasi sebelumnya. Task 21–26 berikut adalah **penambahan inkremental** (Delta 3) yang menambah opsi preset keempat **Custom** (tiga kategori tetap Kebutuhan/Keinginan/Ditabung dengan persentase yang ditentukan pengguna, harus berjumlah tepat 100; Ditabung = Savings_Bucket). **TIDAK ADA migrasi Prisma untuk Delta 3** — `BudgetPlan.presetId` sudah kolom `String` bebas dan `breakdown` sudah `Json`, jadi penanda `presetId "custom"` + breakdown implisit sudah cukup. Urutan: tipe → logika murni (TDD) → API → UI → checkpoint. Sub-task bertanda `*` bersifat opsional (test).
+
+- [ ] 21. Extend tipe domain Planner untuk Custom (`types/planner.ts`)
+  - Perluas `PresetId` menjadi `"50/30/20" | "70/20/10" | "80/20" | "custom"` (tanpa menghapus nilai lama). Tambahkan `CustomAllocation { kebutuhan: number; keinginan: number; ditabung: number }`. Sesuaikan `BUDGET_PRESETS` menjadi `Record<Exclude<PresetId, "custom">, BudgetPreset>` agar record tetap 3 preset tetap.
+  - _Requirements: 15.1_
+
+- [ ] 22. Extend modul murni `lib/planner/presets.ts` + `budget.ts` untuk Custom (TDD)
+  - [ ] 22.1 Extend `lib/planner/presets.ts`: tambahkan `buildCustomPreset(pct: CustomAllocation): BudgetPreset` (id `"custom"`, label `"Custom"`, kategori tetap Kebutuhan/Keinginan/Ditabung dengan `isSavings` masing-masing false/false/true, persentase dari `pct`; guard tiap persentase berhingga ≥ 0 → throw, dan `abs(sum − 100) < 1e-9` → throw bila gagal). Pastikan `getPreset` melempar untuk id `"custom"`/tak dikenal. Impor tipe saja dari `@/types/planner`.
+    - _Requirements: 15.2, 15.3, 15.4, 15.7, 15.8, 15.9_
+  - [ ] 22.2 Extend `lib/planner/budget.ts`: tambahkan `computeBudgetFromPreset(baseAmount, preset)` murni (amount = baseAmount×pct/100 per kategori; `breakdown.presetId = preset.id`; guard baseAmount berhingga ≥ 0) dan ubah `computeBudget(baseAmount, presetId)` agar mendelegasi ke `computeBudgetFromPreset(baseAmount, getPreset(presetId))` untuk preset tetap (perilaku tetap tidak berubah).
+    - _Requirements: 15.5, 15.6, 15.9_
+  - [ ]* 22.3 Property test: `buildCustomPreset` menghasilkan struktur kategori tetap yang benar (id/label, tiga kategori, isSavings, pemetaan persentase).
+    - **Feature: budget-planner, Property 14: buildCustomPreset menghasilkan struktur kategori tetap yang benar**
+    - **Validates: Requirements 15.2, 15.3, 15.4**
+  - [ ]* 22.4 Property test: `computeBudgetFromPreset` mengonservasi jumlah dasar (sum lines ~= baseAmount; amount = base×pct/100; presetId = preset.id) untuk preset tetap & custom.
+    - **Feature: budget-planner, Property 15: computeBudgetFromPreset mengonservasi jumlah dasar**
+    - **Validates: Requirements 15.5, 15.6**
+  - [ ]* 22.5 Property test: `Custom_Allocation` tidak valid ditolak (persentase bukan berhingga ≥ 0, atau `abs(sum − 100) ≥ 1e-9` → throw).
+    - **Feature: budget-planner, Property 16: Custom_Allocation tidak valid ditolak**
+    - **Validates: Requirements 15.7, 15.8**
+  - [ ]* 22.6 Unit test: `"custom"` adalah opsi `presetId` yang sah (contoh); `getPreset("custom")` melempar.
+    - _Requirements: 15.1, 15.9_
+
+- [ ] 23. Extend API `POST /api/budget` — jalur Custom
+  - [ ] 23.1 Extend `app/api/budget/route.ts` POST: perluas validasi `presetId` agar menerima `"custom"` (Req 16.6); terima field opsional `customAllocation`. WHERE `presetId === "custom"`: wajibkan `customAllocation` (else 400, Req 16.2), validasi tiap persentase berhingga ≥ 0 dan `abs(sum − 100) < 1e-9` (else 400, Req 16.3), lalu `preset = buildCustomPreset(customAllocation)` dan `breakdown = computeBudgetFromPreset(baseAmount, preset)`. WHERE preset tetap: pertahankan `computeBudget(baseAmount, presetId)` (abaikan `customAllocation`, Req 16.5). Lanjutkan shortfall + proyeksi target tabungan seperti biasa. Persist `presetId` apa adanya (`"custom"`) + `breakdown` Json — **tanpa kolom baru / migrasi** (Req 16.7).
+    - _Requirements: 16.1, 16.2, 16.3, 16.4, 16.5, 16.6, 16.7_
+  - [ ]* 23.2 Integration test: custom valid → 200 (breakdown custom, label "Custom", + savingsProjection bila ada target); custom tanpa `customAllocation` → 400; custom sum≠100/negatif → 400; preset tetap + customAllocation nyasar → hasil identik tanpa customAllocation; persist presetId "custom" + breakdown (tanpa migrasi).
+    - _Requirements: 16.2, 16.3, 16.4, 16.5, 16.7_
+
+- [ ] 24. Extend UI PresetPicker — kartu Custom + input persentase
+  - [ ] 24.1 Extend `components/planner/PresetPicker.tsx`: tambahkan kartu keempat "Custom"; WHEN dipilih, tampilkan tiga input persentase (Kebutuhan, Keinginan, Ditabung) + indikator total berjalan yang menandai ketika total ≠ 100. Tandai kartu terpilih dengan token `--accent`.
+    - _Requirements: 16.8, 16.9_
+
+- [ ] 25. Extend UI form/wizard — kirim customAllocation + validasi klien
+  - [ ] 25.1 Extend `components/planner/BudgetForm.tsx` + `components/planner/PlannerWizard.tsx`: saat preset custom aktif, kumpulkan tiga persentase dan teruskan sebagai `customAllocation` pada body `POST`. Validasi sisi klien: tiap persentase `0..100` berhingga dan jumlah tepat 100 (toleransi epsilon); WHILE total ≠ 100, cegah/nonaktifkan submit dan tandai kondisinya. Untuk preset tetap, jangan kirim `customAllocation` (perilaku tidak berubah). `BudgetResultCard` tidak perlu diubah — sudah merender breakdown custom (label "Custom") apa adanya (Req 16.10).
+    - _Requirements: 16.1, 16.9, 16.10_
+  - [ ]* 25.2 Component test: `PresetPicker` menampilkan kartu Custom & tiga input + indikator total (muncul saat custom, tidak saat preset tetap); total ≠ 100 mencegah submit dan menandai, total = 100 mengizinkan; `BudgetResultCard` merender breakdown `presetId "custom"` dengan label "Custom".
+    - _Requirements: 16.8, 16.9, 16.10_
+
+- [ ] 26. Checkpoint delta 3 — pastikan build & test hijau
+  - Jalankan `npm run build` (harus bersih) dan `npm test` (logika Custom `buildCustomPreset`/`computeBudgetFromPreset` + suite lama hijau). Pastikan semua test lulus; tanyakan ke pengguna bila muncul pertanyaan.
+
 ## Notes
 
 - Task bertanda `*` bersifat opsional (test) dan dapat dilewati untuk MVP cepat.
@@ -129,10 +225,11 @@ Rencana implementasi menambahkan cakupan **Planner** (penganggaran alokasi berba
 - Pembulatan Rupiah hanya di lapisan tampilan; `computeBudget` mempertahankan presisi agar total pos sama dengan `Base_Amount`.
 - Setiap property test menyertakan tag `Feature: budget-planner, Property {n}: {teks}` dan merujuk properti pada `design.md`.
 - **Delta (Task 9–14):** dibangun di atas implementasi yang sudah hijau; migrasi Task 9 bersifat **aditif nullable** — jangan reset DB. `savingsProjection.ts` tetap murni (impor tipe saja). Nilai berhingga besar ditampilkan apa adanya; hanya laju tabungan nol tanpa pertumbuhan yang jadi status "tidak akan tercapai".
+- **Delta 2 (Task 15–20):** menambah parameter `presentValue` opsional (default 0) + toggle `Include_Savings` (default **mati**) di atas Delta 1 yang sudah selesai. Migrasi Task 15 (`includeSavings Boolean?`) bersifat **aditif nullable** — jangan reset DB. `savingsProjection.ts` tetap murni (impor tipe saja); `presentValue` selalu dihitung di lapisan API dari `Financial_Profile.currentSavings`, tidak dipersistensi. Property 10 menjaga ekuivalensi: dengan toggle mati (`PV = 0`), hasil identik dengan perilaku from-zero yang lama.
 
 ## Task Dependency Graph
 
-Wave 0–8 adalah alokasi (Task 1–8, sudah selesai). Wave 9–13 adalah delta proyeksi target tabungan (Task 9–14); wave delta hanya berjalan setelah wave alokasi selesai dan mengikuti urutan migrasi → tipe → logika murni → API → UI, dengan test setelah kode yang diujinya.
+Wave 0–8 adalah alokasi (Task 1–8, sudah selesai). Wave 9–14 adalah delta proyeksi target tabungan (Task 9–14, sudah selesai). Wave 15–19 adalah **delta 2** present value / Include_Savings (Task 15–20); wave delta 2 hanya berjalan setelah delta 1 selesai dan mengikuti urutan migrasi → tipe → logika murni → API → UI, dengan test setelah kode yang diujinya. Task 18.1 dan 18.2 sama-sama menyunting `app/api/budget/route.ts` sehingga ditempatkan pada wave berbeda untuk menghindari konflik tulis; 19.1 dan 19.2 menyunting berkas berbeda sehingga boleh paralel. Wave 21–26 adalah **delta 3** preset Custom (Task 21–26); wave delta 3 hanya berjalan setelah delta 2 selesai dan mengikuti urutan tipe → logika murni (`presets.ts` lalu `budget.ts` pada wave berbeda karena `computeBudget` mendelegasi ke `computeBudgetFromPreset`/`getPreset`) → API → UI, dengan test setelah kode yang diujinya. Task 24.1 (`PresetPicker.tsx`) dan 25.1 (`BudgetForm.tsx`/`PlannerWizard.tsx`) menyunting berkas berbeda sehingga boleh paralel; tidak ada migrasi Prisma pada delta 3.
 
 ```json
 {
@@ -151,7 +248,19 @@ Wave 0–8 adalah alokasi (Task 1–8, sudah selesai). Wave 9–13 adalah delta 
     { "id": 11, "tasks": ["11.2", "11.3", "11.4", "11.5", "12.1"] },
     { "id": 12, "tasks": ["12.2", "13.2"] },
     { "id": 13, "tasks": ["13.1"] },
-    { "id": 14, "tasks": ["13.3"] }
+    { "id": 14, "tasks": ["13.3"] },
+    { "id": 15, "tasks": ["15", "16"] },
+    { "id": 16, "tasks": ["17.1"] },
+    { "id": 17, "tasks": ["17.2", "17.3", "17.4", "17.5", "17.6", "18.1"] },
+    { "id": 18, "tasks": ["18.2"] },
+    { "id": 19, "tasks": ["18.3", "19.1", "19.2"] },
+    { "id": 20, "tasks": ["19.3"] },
+    { "id": 21, "tasks": ["21"] },
+    { "id": 22, "tasks": ["22.1"] },
+    { "id": 23, "tasks": ["22.2"] },
+    { "id": 24, "tasks": ["22.3", "22.4", "22.5", "22.6", "23.1"] },
+    { "id": 25, "tasks": ["23.2", "24.1", "25.1"] },
+    { "id": 26, "tasks": ["25.2"] }
   ]
 }
 ```

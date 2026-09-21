@@ -55,10 +55,11 @@ model BudgetPlan {
   presetId               String // "50/30/20" | "70/20/10" | "80/20"
   baseAmount             Float
   mode                   String // "terpisah" | "kombinasi"
-  manualSavingsTarget    Float?
+  manualSavingsTarget    Float? // deprecated: tidak lagi dipakai (dipertahankan agar tidak perlu migrasi destruktif)
   investmentContribution Float? // snapshot monthlyContribution (kombinasi)
   savingsTargetAmount    Float? // target tabungan opsional (proyeksi)
   savingsHorizonYears    Int? // horizon tahun opsional (Arah B)
+  includeSavings         Boolean? // apakah tabungan saat ini dihitung sebagai saldo awal (present value)
   breakdown              Json // BudgetLine[] hasil computeBudget
   createdAt              DateTime @default(now())
 }

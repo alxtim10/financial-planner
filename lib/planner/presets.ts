@@ -4,16 +4,25 @@
 // "Components → presets.ts" dan "Data Models → Struktur Konstanta Preset",
 // serta requirements.md Requirement 3 (Acceptance Criteria 3.1–3.5, 3.7).
 
-import type { BudgetPreset, PresetId } from "@/types/planner";
+import type {
+  BudgetPreset,
+  CustomAllocation,
+  FixedPresetId,
+  PresetId,
+} from "@/types/planner";
 
 /**
- * Konstanta terstruktur berisi 3 metode penganggaran preset.
+ * Konstanta terstruktur berisi 3 metode penganggaran preset TETAP.
+ *
+ * Bertipe `Record<FixedPresetId, BudgetPreset>` (Req 15.1) sehingga record ini
+ * tetap memuat tepat 3 preset tetap dan TIDAK memuat kunci `"custom"` — preset
+ * kustom dibangun lewat `buildCustomPreset`, bukan lewat record ini.
  *
  * Invarian (Req 3.5): untuk setiap preset, jumlah `percentage` seluruh kategori
  * sama dengan 100. Kategori yang merepresentasikan Savings_Bucket ditandai
  * `isSavings: true`.
  */
-export const BUDGET_PRESETS: Record<PresetId, BudgetPreset> = {
+export const BUDGET_PRESETS: Record<FixedPresetId, BudgetPreset> = {
   "50/30/20": {
     id: "50/30/20",
     label: "50/30/20",
@@ -47,10 +56,16 @@ export const BUDGET_PRESETS: Record<PresetId, BudgetPreset> = {
  *
  * Walaupun `PresetId` bertipe ketat, id bisa berasal dari API/JSON saat runtime,
  * sehingga tetap dijaga: melempar Error bila id bukan salah satu dari tiga preset
- * yang tersedia (Req 3.7).
+ * TETAP yang tersedia (Req 3.7).
+ *
+ * Catatan (Req 15.9): `getPreset` TIDAK dipakai untuk id `"custom"`. Karena
+ * `BUDGET_PRESETS` hanya memuat preset tetap, `getPreset("custom")` (atau id tak
+ * dikenal lainnya) akan melempar — jalur custom memakai `buildCustomPreset`.
  */
 export function getPreset(id: PresetId): BudgetPreset {
-  const preset = BUDGET_PRESETS[id];
+  const preset = (BUDGET_PRESETS as Record<string, BudgetPreset | undefined>)[
+    id
+  ];
 
   if (!preset) {
     throw new Error(
@@ -61,4 +76,53 @@ export function getPreset(id: PresetId): BudgetPreset {
   }
 
   return preset;
+}
+
+/**
+ * Membangun `BudgetPreset` untuk metode penganggaran KUSTOM (Req 15.2–15.4).
+ *
+ * Kategori tetap tiga dan berurutan: Kebutuhan, Keinginan, Ditabung — dengan
+ * **Ditabung** sebagai Savings_Bucket (`isSavings: true`). Persentase diambil
+ * dari `pct` (Custom_Allocation).
+ *
+ * Guard (fungsi tetap murni, tanpa I/O):
+ * - Setiap persentase harus angka berhingga >= 0, else melempar Error (Req 15.7).
+ * - Jumlah ketiga persentase harus tepat 100 dalam toleransi epsilon
+ *   `abs(sum - 100) < 1e-9`, else melempar Error (Req 15.8).
+ */
+export function buildCustomPreset(pct: CustomAllocation): BudgetPreset {
+  const { kebutuhan, keinginan, ditabung } = pct;
+
+  const entries: ReadonlyArray<readonly [string, number]> = [
+    ["Kebutuhan", kebutuhan],
+    ["Keinginan", keinginan],
+    ["Ditabung", ditabung],
+  ];
+
+  for (const [name, value] of entries) {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error(
+        `Persentase ${name} tidak valid: harus angka berhingga >= 0, diterima ${String(
+          value
+        )}.`
+      );
+    }
+  }
+
+  const sum = kebutuhan + keinginan + ditabung;
+  if (Math.abs(sum - 100) >= 1e-9) {
+    throw new Error(
+      `Total persentase kustom harus tepat 100, diterima ${sum}.`
+    );
+  }
+
+  return {
+    id: "custom",
+    label: "Custom",
+    categories: [
+      { name: "Kebutuhan", percentage: kebutuhan, isSavings: false },
+      { name: "Keinginan", percentage: keinginan, isSavings: false },
+      { name: "Ditabung", percentage: ditabung, isSavings: true },
+    ],
+  };
 }

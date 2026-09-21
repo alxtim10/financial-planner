@@ -4,27 +4,36 @@ import { prisma } from "@/lib/db";
 import { getLatestProfile } from "@/lib/profileGate";
 import {
   computeBudget,
+  computeBudgetFromPreset,
   savingsBucketAmount,
   evaluateShortfall,
 } from "@/lib/planner/budget";
+import { buildCustomPreset } from "@/lib/planner/presets";
 import {
   monthsToReachTarget,
   requiredMonthlySaving,
 } from "@/lib/planner/savingsProjection";
-import type { PresetId, SavingsMode, SavingsProjection } from "@/types/planner";
+import type {
+  CustomAllocation,
+  PresetId,
+  SavingsMode,
+  SavingsProjection,
+} from "@/types/planner";
 
 export const runtime = "nodejs";
 
-const PRESET_IDS: readonly PresetId[] = ["50/30/20", "70/20/10", "80/20"];
+// Req 16.6: "custom" kini nilai presetId yang sah di samping tiga preset tetap.
+const PRESET_IDS: readonly PresetId[] = ["50/30/20", "70/20/10", "80/20", "custom"];
 const SAVINGS_MODES: readonly SavingsMode[] = ["terpisah", "kombinasi"];
 
 interface BudgetBody {
   presetId?: unknown;
   baseAmount?: unknown;
   mode?: unknown;
-  manualSavingsTarget?: unknown;
+  customAllocation?: unknown;
   savingsTargetAmount?: unknown;
   savingsHorizonYears?: unknown;
+  includeSavings?: unknown;
   userId?: string | null;
 }
 
@@ -45,12 +54,16 @@ export async function GET() {
   try {
     const profile = await getLatestProfile();
     const defaultBaseAmount = profile?.income ?? null;
+    const currentSavings = profile?.currentSavings ?? null;
 
     const latestPlan = await prisma.budgetPlan.findFirst({
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json({ defaultBaseAmount, latestPlan }, { status: 200 });
+    return NextResponse.json(
+      { defaultBaseAmount, currentSavings, latestPlan },
+      { status: 200 },
+    );
   } catch (err) {
     console.error("[budget] gagal memuat konteks awal Planner:", err);
     return NextResponse.json(
@@ -63,13 +76,12 @@ export async function GET() {
 /**
  * POST /api/budget — hitung + simpan rencana anggaran.
  *
- * Body: { presetId, baseAmount, mode, manualSavingsTarget?, userId? }
+ * Body: { presetId, baseAmount, mode, savingsTargetAmount?, savingsHorizonYears?, userId? }
  *
  * Validasi (→ 400):
  *   - presetId ∈ { "50/30/20", "70/20/10", "80/20" }.
  *   - baseAmount angka berhingga ≥ 0.
  *   - mode ∈ { "terpisah", "kombinasi" }.
- *   - manualSavingsTarget (bila diberikan) angka berhingga ≥ 0.
  *
  * Alur server:
  *   1. computeBudget(baseAmount, presetId) → breakdown (error input → 400).
@@ -87,7 +99,7 @@ export async function GET() {
  *   7. Persist BudgetPlan (snapshot investmentContribution di kombinasi;
  *      savingsTargetAmount/savingsHorizonYears bila ada).
  *   8. Sukses → 200 { breakdown, savingsBucketAmount, investmentContribution,
- *      manualSavingsTarget, shortfall, savingsProjection, recommendationMissing? }.
+ *      shortfall, savingsProjection, recommendationMissing? }.
  *
  * Error mesin (input tidak valid) → 400; error DB → 500 (pesan ramah, Req 7.5).
  *
@@ -106,16 +118,20 @@ export async function POST(req: Request) {
     presetId,
     baseAmount,
     mode,
-    manualSavingsTarget = null,
+    customAllocation = null,
     savingsTargetAmount = null,
     savingsHorizonYears = null,
+    includeSavings = false,
     userId = null,
   } = body ?? {};
+
+  // Lenient: hanya `true` (boolean) yang dianggap aktif; selain itu → false. Req 14.
+  const includeSavingsValue = includeSavings === true;
 
   // 1. Validasi input.
   if (typeof presetId !== "string" || !PRESET_IDS.includes(presetId as PresetId)) {
     return NextResponse.json(
-      { error: "Metode preset harus salah satu dari 50/30/20, 70/20/10, atau 80/20." },
+      { error: "Metode preset harus salah satu dari 50/30/20, 70/20/10, 80/20, atau custom." },
       { status: 400 },
     );
   }
@@ -130,19 +146,6 @@ export async function POST(req: Request) {
   if (typeof mode !== "string" || !SAVINGS_MODES.includes(mode as SavingsMode)) {
     return NextResponse.json(
       { error: "Mode tabungan harus 'terpisah' atau 'kombinasi'." },
-      { status: 400 },
-    );
-  }
-
-  if (
-    manualSavingsTarget !== null &&
-    manualSavingsTarget !== undefined &&
-    (typeof manualSavingsTarget !== "number" ||
-      !Number.isFinite(manualSavingsTarget) ||
-      manualSavingsTarget < 0)
-  ) {
-    return NextResponse.json(
-      { error: "Target tabungan manual harus berupa angka yang tidak negatif." },
       { status: 400 },
     );
   }
@@ -176,25 +179,89 @@ export async function POST(req: Request) {
 
   const presetIdValue = presetId as PresetId;
   const modeValue = mode as SavingsMode;
-  const manualSavingsTargetValue =
-    typeof manualSavingsTarget === "number" ? manualSavingsTarget : null;
   const savingsTargetAmountValue =
     typeof savingsTargetAmount === "number" ? savingsTargetAmount : null;
   const savingsHorizonYearsValue =
     typeof savingsHorizonYears === "number" ? savingsHorizonYears : null;
 
   // 2. Mesin penganggaran (pure functions). Error input → 400.
+  //
+  // Jalur Custom (Req 16.1–16.3): saat presetId === "custom", wajibkan
+  // customAllocation berupa objek dengan tiga persentase berhingga >= 0 dan
+  // jumlah tepat 100, lalu bangun preset kustom dan hitung breakdown darinya.
+  // Jalur preset tetap: pertahankan computeBudget (abaikan customAllocation).
   let breakdown;
   let savings: number;
-  try {
-    breakdown = computeBudget(baseAmount, presetIdValue);
-    savings = savingsBucketAmount(breakdown);
-  } catch (err) {
-    console.error("[budget] input mesin penganggaran tidak valid:", err);
-    return NextResponse.json(
-      { error: "Data untuk menghitung anggaran tidak valid." },
-      { status: 400 },
-    );
+
+  if (presetIdValue === "custom") {
+    // Req 16.2: customAllocation wajib & berbentuk objek dengan tiga angka
+    // berhingga >= 0 untuk kebutuhan/keinginan/ditabung.
+    const alloc = customAllocation as
+      | { kebutuhan?: unknown; keinginan?: unknown; ditabung?: unknown }
+      | null;
+    const isValidAllocation =
+      typeof alloc === "object" &&
+      alloc !== null &&
+      typeof alloc.kebutuhan === "number" &&
+      Number.isFinite(alloc.kebutuhan) &&
+      alloc.kebutuhan >= 0 &&
+      typeof alloc.keinginan === "number" &&
+      Number.isFinite(alloc.keinginan) &&
+      alloc.keinginan >= 0 &&
+      typeof alloc.ditabung === "number" &&
+      Number.isFinite(alloc.ditabung) &&
+      alloc.ditabung >= 0;
+
+    if (!isValidAllocation) {
+      return NextResponse.json(
+        {
+          error:
+            "Alokasi kustom harus berisi persentase Kebutuhan, Keinginan, dan Ditabung berupa angka yang tidak negatif.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const customAllocationValue: CustomAllocation = {
+      kebutuhan: alloc.kebutuhan as number,
+      keinginan: alloc.keinginan as number,
+      ditabung: alloc.ditabung as number,
+    };
+
+    // Req 16.3: jumlah tiga persentase harus tepat 100.
+    const sum =
+      customAllocationValue.kebutuhan +
+      customAllocationValue.keinginan +
+      customAllocationValue.ditabung;
+    if (Math.abs(sum - 100) >= 1e-9) {
+      return NextResponse.json(
+        { error: "Total persentase harus tepat 100." },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const preset = buildCustomPreset(customAllocationValue);
+      breakdown = computeBudgetFromPreset(baseAmount, preset);
+      savings = savingsBucketAmount(breakdown);
+    } catch (err) {
+      console.error("[budget] input mesin penganggaran kustom tidak valid:", err);
+      return NextResponse.json(
+        { error: "Data untuk menghitung anggaran tidak valid." },
+        { status: 400 },
+      );
+    }
+  } else {
+    try {
+      breakdown = computeBudget(baseAmount, presetIdValue);
+      savings = savingsBucketAmount(breakdown);
+    } catch (err) {
+      console.error("[budget] input mesin penganggaran tidak valid:", err);
+      return NextResponse.json(
+        { error: "Data untuk menghitung anggaran tidak valid." },
+        { status: 400 },
+      );
+    }
   }
 
   // 3. Tentukan Investment_Contribution + Growth_Rate berdasarkan mode.
@@ -227,12 +294,22 @@ export async function POST(req: Request) {
   let savingsProjection: SavingsProjection | null = null;
   try {
     if (savingsTargetAmountValue !== null) {
+      // Present_Value: hanya relevan saat ada target tabungan. Bila
+      // includeSavings aktif → currentSavings profil terbaru (?? 0), else 0.
+      // Ambil profil sekali di cabang ini untuk hindari panggilan berulang. Req 14.
+      let presentValue = 0;
+      if (includeSavingsValue) {
+        const profile = await getLatestProfile();
+        presentValue = profile?.currentSavings ?? 0;
+      }
+
       if (savingsHorizonYearsValue === null) {
         // Arah A (Time_To_Goal): target tanpa horizon.
         const result = monthsToReachTarget({
           targetAmount: savingsTargetAmountValue,
           monthlySaving: monthlySavingRate,
           annualReturn: growthRate,
+          presentValue,
         });
         savingsProjection = {
           direction: "time-to-goal",
@@ -240,6 +317,9 @@ export async function POST(req: Request) {
           horizonYears: null,
           monthlySavingRate,
           annualReturn: growthRate,
+          includeSavings: includeSavingsValue,
+          presentValue,
+          alreadyReached: result.alreadyReached,
           reachable: result.reachable,
           months: result.months,
           years: result.months === null ? null : result.months / 12,
@@ -253,13 +333,18 @@ export async function POST(req: Request) {
           targetAmount: savingsTargetAmountValue,
           horizonYears: savingsHorizonYearsValue,
           annualReturn: growthRate,
+          presentValue,
         });
+        const alreadyReached = presentValue >= savingsTargetAmountValue;
         savingsProjection = {
           direction: "required-monthly",
           targetAmount: savingsTargetAmountValue,
           horizonYears: savingsHorizonYearsValue,
           monthlySavingRate,
           annualReturn: growthRate,
+          includeSavings: includeSavingsValue,
+          presentValue,
+          alreadyReached,
           reachable: true,
           months: null,
           years: null,
@@ -286,10 +371,11 @@ export async function POST(req: Request) {
         presetId: presetIdValue,
         baseAmount,
         mode: modeValue,
-        manualSavingsTarget: manualSavingsTargetValue,
+        // manualSavingsTarget sengaja diomit → kolom default NULL (deprecated).
         investmentContribution: modeValue === "kombinasi" ? investmentContribution : null,
         savingsTargetAmount: savingsTargetAmountValue ?? null,
         savingsHorizonYears: savingsHorizonYearsValue ?? null,
+        includeSavings: includeSavingsValue,
         breakdown: breakdown.lines as unknown as Prisma.InputJsonValue,
       },
     });
@@ -307,7 +393,6 @@ export async function POST(req: Request) {
       breakdown,
       savingsBucketAmount: savings,
       investmentContribution,
-      manualSavingsTarget: manualSavingsTargetValue,
       shortfall,
       savingsProjection,
       ...(modeValue === "kombinasi" ? { recommendationMissing } : {}),
