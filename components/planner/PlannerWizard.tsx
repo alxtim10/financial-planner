@@ -37,6 +37,9 @@ export default function PlannerWizard() {
   const [defaultMonthlyIncome, setDefaultMonthlyIncome] = useState<number | null>(
     null
   );
+  const [defaultMonthlyExpense, setDefaultMonthlyExpense] = useState<
+    number | null
+  >(null);
   const [currentSavings, setCurrentSavings] = useState<number | null>(null);
   // Prefill tujuan dari Active_Goal (via GET /api/budget).
   const [defaultTargetAmount, setDefaultTargetAmount] = useState<number | null>(
@@ -63,6 +66,10 @@ export default function PlannerWizard() {
           const income = data?.defaultMonthlyIncome;
           if (typeof income === "number" && Number.isFinite(income)) {
             setDefaultMonthlyIncome(income);
+          }
+          const expense = data?.monthlyExpense;
+          if (typeof expense === "number" && Number.isFinite(expense)) {
+            setDefaultMonthlyExpense(expense);
           }
           const savings = data?.currentSavings;
           if (typeof savings === "number" && Number.isFinite(savings)) {
@@ -102,6 +109,7 @@ export default function PlannerWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           monthlyIncome: values.monthlyIncome,
+          monthlyExpense: values.monthlyExpense,
           targetAmount: values.targetAmount,
           horizonYears: values.horizonYears,
         }),
@@ -183,6 +191,7 @@ export default function PlannerWizard() {
             <>
               <BudgetForm
                 defaultMonthlyIncome={defaultMonthlyIncome}
+                defaultMonthlyExpense={defaultMonthlyExpense}
                 currentSavings={currentSavings}
                 defaultTargetAmount={defaultTargetAmount}
                 defaultHorizonYears={defaultHorizonYears}

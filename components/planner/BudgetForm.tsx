@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   Wallet,
+  TrendingDown,
   Target,
   CalendarClock,
   PiggyBank,
@@ -15,6 +16,8 @@ import { formatThousands, parseThousands } from "@/lib/format/rupiahInput";
 export interface BudgetFormValues {
   /** Monthly_Income (Rupiah). Berhingga > 0. */
   monthlyIncome: number;
+  /** Monthly_Expense (Rupiah). Berhingga >= 0. */
+  monthlyExpense: number;
   /** Target_Amount (Rupiah). Berhingga > 0. */
   targetAmount: number;
   /** Horizon_Years (tahun). Bilangan bulat > 0. */
@@ -24,6 +27,12 @@ export interface BudgetFormValues {
 interface BudgetFormProps {
   /** Prefill Monthly_Income dari `income` profil terbaru; `null` bila tak ada. */
   defaultMonthlyIncome: number | null;
+  /**
+   * Prefill Monthly_Expense dari `expense` profil terbaru (Rupiah); `null` bila
+   * tak ada. Pengguna dapat mengisi/mengubah bebas — sistem tidak tahu
+   * pengeluaran pengguna, jadi ini free input.
+   */
+  defaultMonthlyExpense?: number | null;
   /**
    * `currentSavings` dari `Financial_Profile` terbaru (Rupiah); `null`/`0`
    * bila tak ada. Ditampilkan sebagai konteks READ-ONLY, bukan field editable.
@@ -45,7 +54,7 @@ interface BudgetFormProps {
   submitting?: boolean;
 }
 
-type FieldKey = "monthlyIncome" | "targetAmount" | "horizonYears";
+type FieldKey = "monthlyIncome" | "monthlyExpense" | "targetAmount" | "horizonYears";
 type FieldErrors = Partial<Record<FieldKey, string>>;
 
 /** Format angka ke Rupiah gaya Indonesia (10000 → "Rp 10.000"). */
@@ -59,6 +68,15 @@ function validateMonthlyIncome(value: string): string | undefined {
   const n = parseThousands(value);
   if (n === null || !Number.isFinite(n)) return "Harus berupa angka.";
   if (n <= 0) return "Harus lebih dari 0.";
+  return undefined;
+}
+
+/** Validasi Monthly_Expense: wajib, angka berhingga >= 0. */
+function validateMonthlyExpense(value: string): string | undefined {
+  if (value.trim() === "") return "Wajib diisi.";
+  const n = parseThousands(value);
+  if (n === null || !Number.isFinite(n)) return "Harus berupa angka.";
+  if (n < 0) return "Tidak boleh negatif.";
   return undefined;
 }
 
@@ -91,6 +109,7 @@ function validateHorizonYears(value: string): string | undefined {
  */
 export default function BudgetForm({
   defaultMonthlyIncome,
+  defaultMonthlyExpense,
   currentSavings,
   defaultTargetAmount,
   defaultHorizonYears,
@@ -100,6 +119,12 @@ export default function BudgetForm({
   const [monthlyIncome, setMonthlyIncome] = useState(
     defaultMonthlyIncome != null && Number.isFinite(defaultMonthlyIncome)
       ? formatThousands(String(defaultMonthlyIncome))
+      : ""
+  );
+  // Prefill Monthly_Expense dari profil (bergrup ribuan) bila tersedia.
+  const [monthlyExpense, setMonthlyExpense] = useState(
+    defaultMonthlyExpense != null && Number.isFinite(defaultMonthlyExpense)
+      ? formatThousands(String(defaultMonthlyExpense))
       : ""
   );
   // Prefill Target_Amount dari Active_Goal (bergrup ribuan) bila tersedia.
@@ -126,6 +151,8 @@ export default function BudgetForm({
     const next: FieldErrors = {};
     const incomeErr = validateMonthlyIncome(monthlyIncome);
     if (incomeErr) next.monthlyIncome = incomeErr;
+    const expenseErr = validateMonthlyExpense(monthlyExpense);
+    if (expenseErr) next.monthlyExpense = expenseErr;
     const targetErr = validateTargetAmount(targetAmount);
     if (targetErr) next.targetAmount = targetErr;
     const horizonErr = validateHorizonYears(horizonYears);
@@ -141,6 +168,7 @@ export default function BudgetForm({
 
     onSubmit({
       monthlyIncome: parseThousands(monthlyIncome) ?? 0,
+      monthlyExpense: parseThousands(monthlyExpense) ?? 0,
       targetAmount: parseThousands(targetAmount) ?? 0,
       horizonYears: Number(horizonYears.trim()),
     });
@@ -148,6 +176,7 @@ export default function BudgetForm({
 
   // Pratinjau mencerminkan nilai bergrup yang sedang diketik.
   const incomePreview = monthlyIncome ? `Rp ${monthlyIncome}` : null;
+  const expensePreview = monthlyExpense ? `Rp ${monthlyExpense}` : null;
   const targetPreview = targetAmount ? `Rp ${targetAmount}` : null;
 
   return (
@@ -201,6 +230,55 @@ export default function BudgetForm({
             {incomePreview
               ? incomePreview
               : "Otomatis dari profil, dapat Anda ubah untuk skenario lain."}
+          </p>
+        )}
+      </div>
+
+      {/* Monthly_Expense — free input pengeluaran bulanan */}
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="monthlyExpense" className="text-sm font-medium text-foreground">
+          Pengeluaran bulanan
+        </label>
+        <div
+          className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(0,180,216,0.12)] ${
+            errors.monthlyExpense
+              ? "border-red-400"
+              : "border-border focus-within:border-[var(--accent)]/50"
+          }`}
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
+            <TrendingDown className="h-4 w-4" />
+          </span>
+          <span className="shrink-0 text-sm text-muted">Rp</span>
+          <input
+            id="monthlyExpense"
+            name="monthlyExpense"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={monthlyExpense}
+            onChange={(e) => {
+              setMonthlyExpense(formatThousands(e.target.value));
+              if (errors.monthlyExpense)
+                setErrors((p) => ({ ...p, monthlyExpense: undefined }));
+            }}
+            placeholder="0"
+            aria-invalid={errors.monthlyExpense ? true : undefined}
+            aria-describedby={
+              errors.monthlyExpense ? "monthlyExpense-error" : "monthlyExpense-hint"
+            }
+            className="min-w-0 flex-1 bg-transparent text-[0.9375rem] text-foreground placeholder:text-muted focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
+        </div>
+        {errors.monthlyExpense ? (
+          <p id="monthlyExpense-error" className="text-xs text-red-500">
+            {errors.monthlyExpense}
+          </p>
+        ) : (
+          <p id="monthlyExpense-hint" className="text-xs text-muted">
+            {expensePreview
+              ? expensePreview
+              : "Rata-rata kebutuhan rutin per bulan. Dipakai sebagai pos Kebutuhan."}
           </p>
         )}
       </div>

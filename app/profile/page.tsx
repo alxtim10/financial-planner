@@ -3,7 +3,7 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 import ProfileForm from "@/components/profile/ProfileForm";
 
 export const metadata = {
-  title: "Profil Finansial — alxfinancial",
+  title: "Profil Finansial — TabungOne",
   description: "Isi profil finansial dasar sebelum memulai perencanaan investasi.",
 };
 

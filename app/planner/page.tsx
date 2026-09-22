@@ -9,7 +9,7 @@ import PlannerWizard from "@/components/planner/PlannerWizard";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Perencanaan Anggaran — alxfinancial",
+  title: "Perencanaan Anggaran — TabungOne",
   description:
     "Pilih metode penganggaran preset, tetapkan jumlah dasar, dan lihat alokasi anggaran per pos secara edukatif.",
 };

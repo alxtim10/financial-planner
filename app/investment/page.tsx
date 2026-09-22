@@ -9,7 +9,7 @@ import InvestmentWizard from "@/components/investment/InvestmentWizard";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Perencanaan Investasi — alxfinancial",
+  title: "Perencanaan Investasi — TabungOne",
   description:
     "Tetapkan tujuan, isi survei risiko, dan dapatkan rekomendasi alokasi investasi edukatif.",
 };

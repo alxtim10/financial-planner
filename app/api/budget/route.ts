@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 
 interface BudgetBody {
   monthlyIncome?: unknown;
+  monthlyExpense?: unknown;
   targetAmount?: unknown;
   horizonYears?: unknown;
   userId?: string | null;
@@ -101,12 +102,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Permintaan tidak valid." }, { status: 400 });
   }
 
-  const { monthlyIncome, targetAmount, horizonYears, userId = null } = body ?? {};
+  const {
+    monthlyIncome,
+    monthlyExpense,
+    targetAmount,
+    horizonYears,
+    userId = null,
+  } = body ?? {};
 
   // Validasi input (→ 400).
   if (typeof monthlyIncome !== "number" || !Number.isFinite(monthlyIncome) || monthlyIncome <= 0) {
     return NextResponse.json(
       { error: "Pemasukan bulanan harus berupa angka yang lebih besar dari nol." },
+      { status: 400 },
+    );
+  }
+
+  // monthlyExpense opsional: jika dikirim, wajib angka berhingga >= 0.
+  if (
+    monthlyExpense !== undefined &&
+    monthlyExpense !== null &&
+    (typeof monthlyExpense !== "number" ||
+      !Number.isFinite(monthlyExpense) ||
+      monthlyExpense < 0)
+  ) {
+    return NextResponse.json(
+      { error: "Pengeluaran bulanan harus berupa angka yang tidak negatif." },
       { status: 400 },
     );
   }
@@ -125,10 +146,12 @@ export async function POST(req: Request) {
     );
   }
 
-  // 1. Suplai currentSavings + monthlyExpense dari profil terbaru.
+  // 1. currentSavings dari profil; monthlyExpense diutamakan dari input pengguna
+  //    (free input), fallback ke profil bila tidak dikirim.
   const profile = await getLatestProfile();
   const currentSavings = profile?.currentSavings ?? 0;
-  const monthlyExpense = profile?.expense ?? 0;
+  const resolvedMonthlyExpense =
+    typeof monthlyExpense === "number" ? monthlyExpense : profile?.expense ?? 0;
 
   // 2. Mesin goal-driven (pure function). Guard error → 400 (jaring pengaman).
   let result: GoalBudgetResult;
@@ -138,7 +161,7 @@ export async function POST(req: Request) {
       currentSavings,
       targetAmount,
       horizonYears,
-      monthlyExpense,
+      monthlyExpense: resolvedMonthlyExpense,
     });
   } catch (err) {
     console.error("[budget] input mesin goal-driven tidak valid:", err);
