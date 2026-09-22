@@ -53,9 +53,9 @@ model InvestmentRecommendation {
 model BudgetPlan {
   id                     String   @id @default(cuid())
   userId                 String? // placeholder auth (nullable)
-  presetId               String // "50/30/20" | "70/20/10" | "80/20"
+  presetId               String // goal-driven aktif: "goal" (nilai lama preset "50/30/20"|"70/20/10"|"80/20" dipensiunkan)
   baseAmount             Float
-  mode                   String // "terpisah" | "kombinasi"
+  mode                   String // goal-driven aktif: "goal" (nilai lama "terpisah"|"kombinasi" dipensiunkan)
   manualSavingsTarget    Float? // deprecated: tidak lagi dipakai (dipertahankan agar tidak perlu migrasi destruktif)
   investmentContribution Float? // snapshot monthlyContribution (kombinasi)
   savingsTargetAmount    Float? // target tabungan opsional (proyeksi)
