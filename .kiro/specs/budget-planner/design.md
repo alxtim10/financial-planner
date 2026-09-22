@@ -1,6 +1,188 @@
 # Design Document
 
-## Overview
+## Overview (Iterasi Goal-Driven) — OTORITATIF
+
+> **Pivot arah Planner: dari preset/persentase-driven ke goal-driven.** Mulai iterasi ini, Planner **membalik** arah perhitungan. Alih-alih memilih persentase (preset/Custom) dengan target sebagai efek samping, pengguna memberi **`Monthly_Income`, `Current_Savings`, `Target_Amount`, `Horizon_Years`**, lalu sistem **menghitung `Ditabung` per bulan** dengan **akumulasi murni (plain accumulation) tanpa bunga**, menurunkan `Kebutuhan`/`Keinginan`, dan menyajikan **persentase sebagai OUTPUT** (`Derived_Percentage`).
+>
+> Bagian **"Desain Model Goal-Driven"** di bawah adalah **otoritatif** dan memenuhi **Requirement 17–21**. Bagian desain lama (Overview preset di bawah ini, Architecture, Components preset, Data Models preset, Correctness Properties 1–16, dan Delta 1–3) **DISUPERSEKSI** dan dipertahankan hanya sebagai konteks historis.
+>
+> **Ringkasan keputusan desain goal-driven:**
+> - **Fungsi murni baru** `lib/planner/goalBudget.ts` — `computeGoalBudget(input)` → `GoalBudgetResult`. Akumulasi murni, tanpa anuitas/pertumbuhan.
+> - **Modul lama disuperseksi (dipertahankan, tak dipakai UI/API Planner):** `presets.ts`, `budget.ts`, `savingsProjection.ts` tidak lagi dipanggil oleh alur Planner goal-driven. Boleh tetap ada di repo (tidak dihapus) tetapi tidak terhubung ke UI/API.
+> - **UI disederhanakan:** `PresetPicker` **dihapus** dari alur; wizard menjadi form tunggal → hasil.
+> - **Persistensi memakai ulang kolom `BudgetPlan`** dengan penanda `presetId = "goal"` — **tanpa migrasi Prisma**.
+
+---
+
+## Desain Model Goal-Driven (OTORITATIF)
+
+### Prinsip
+
+- **Perhitungan murni & terisolasi.** Seluruh matematika goal-driven berada di satu pure function `computeGoalBudget` di `lib/planner/goalBudget.ts`, hanya mengimpor tipe dari `@/types/planner` (mengikuti pola `lib/investment/*` dan konvensi `lib/planner/*` lama). Deterministik dan mudah diuji dengan PBT (Req 18.8).
+- **Reuse infrastruktur.** Memakai ulang `Profile_Gate` (Req 21.1), `getLatestProfile()`, Prisma singleton (`lib/db.ts`), pola API runtime Node.js dengan error ramah, helper input Rupiah `lib/format/rupiahInput.ts`, dan pola visual `RecommendationCard` (bar proporsi + rincian pos + Rupiah + disclaimer).
+- **Akumulasi murni (no growth).** Model sengaja tidak memakai bunga/pertumbuhan: `Ditabung = max(0, Target_Amount − Current_Savings) / Months_N`.
+- **Persentase = OUTPUT.** Tidak ada input persentase; `Derived_Percentage` diturunkan untuk tampilan (Req 19).
+- **Reuse kolom, tanpa migrasi.** `BudgetPlan.presetId` sudah `String` bebas dan `breakdown` sudah `Json`; penanda `presetId = "goal"` cukup (Req 21.6).
+
+### Diagram Alur Goal-Driven
+
+```mermaid
+flowchart TD
+    U[Pengguna / Browser] -->|buka /planner| PL[app/planner/page.tsx]
+    PL --> Gate{{Profile Gate - reuse}}
+    Gate -.blokir tanpa profil.-> Prof[/profile/]
+    Gate -->|profil ada| Wiz[PlannerWizard - disederhanakan]
+
+    Wiz -->|GET default income/savings/expense| API[/api/budget/]
+    Wiz -->|POST monthlyIncome+targetAmount+horizonYears| API
+
+    API -->|ambil expense & currentSavings| DBfp[(FinancialProfile)]
+    API -->|computeGoalBudget| Pure[lib/planner/goalBudget.ts - pure]
+    API -->|simpan presetId=goal, reuse kolom| DBbp[(BudgetPlan - reuse)]
+
+    DBfp --> DB[(PostgreSQL via Prisma singleton)]
+    DBbp --> DB
+```
+
+### Tipe Domain Goal-Driven (`types/planner.ts`)
+
+Ditambahkan tanpa menghapus tipe lama (tipe preset/persentase tetap ada tetapi disuperseksi untuk alur ini). `BudgetLine` dipakai ulang untuk ketiga pos (dengan `percentage` = `Derived_Percentage`).
+
+```ts
+// Input goal-driven yang diterima computeGoalBudget (nilai presisi, Rupiah).
+export interface GoalBudgetInput {
+  monthlyIncome: number;   // > 0, berhingga
+  currentSavings: number;  // >= 0, berhingga (saldo awal, selalu dihitung)
+  targetAmount: number;    // > 0, berhingga
+  horizonYears: number;    // bilangan bulat positif
+  monthlyExpense: number;  // >= 0, berhingga (0 → rasio fallback Kebutuhan)
+}
+
+export type FeasibilitySeverity = "ok" | "tight" | "impossible";
+
+export interface GoalFeasibility {
+  feasible: boolean;             // false bila ditabung+kebutuhan > income
+  severity: FeasibilitySeverity; // "ok" | "tight" | "impossible"
+  reason: string;                // pesan + saran (Bahasa Indonesia) untuk UI
+}
+
+export interface GoalBudgetResult {
+  monthlyIncome: number;   // echo input (dasar Derived_Percentage)
+  monthsN: number;         // horizonYears * 12
+  ditabung: number;        // Rupiah presisi (isSavings pos)
+  kebutuhan: number;       // Rupiah presisi
+  keinginan: number;       // Rupiah presisi (bisa < 0 pada kondisi tak layak)
+  // Persentase turunan (OUTPUT), pos / monthlyIncome * 100:
+  ditabungPct: number;
+  kebutuhanPct: number;
+  keinginanPct: number;
+  // Ketiga pos sebagai BudgetLine (reuse tipe lama; percentage = Derived_Percentage,
+  // amount = nominal Rupiah, isSavings = true hanya untuk Ditabung):
+  lines: BudgetLine[];
+  alreadyReached: boolean; // currentSavings >= targetAmount → ditabung 0
+  feasibility: GoalFeasibility;
+}
+```
+
+Catatan tipe: `PresetId`, `CustomAllocation`, `SavingsProjection`, `SavingsMode`, dsb. **tetap** di `types/planner.ts` tetapi **ditandai superseded/unused** untuk alur goal-driven (tidak diimpor `goalBudget.ts`).
+
+### Fungsi Murni `lib/planner/goalBudget.ts`
+
+Pure function — tanpa I/O, hanya mengimpor tipe dari `@/types/planner`. **Tidak** mengimpor `savingsProjection.ts`/`budget.ts`/`presets.ts` (yang kini disuperseksi).
+
+```ts
+import type { GoalBudgetInput, GoalBudgetResult } from "@/types/planner";
+
+// computeGoalBudget: hitung Ditabung/Kebutuhan/Keinginan + persentase turunan +
+// alreadyReached + feasibility dari input goal-driven. Akumulasi murni (no growth).
+// Guard (throw Error): monthlyIncome berhingga > 0; currentSavings berhingga >= 0;
+// targetAmount berhingga > 0; horizonYears bilangan bulat positif; monthlyExpense
+// berhingga >= 0. Pembulatan hanya di tampilan (nilai hasil tetap presisi).
+export function computeGoalBudget(input: GoalBudgetInput): GoalBudgetResult;
+```
+
+**Rumus & aturan (Req 18–20):**
+
+1. **Guard input** (Req 17.6–17.10): `monthlyIncome` finite `> 0`; `currentSavings` finite `>= 0`; `targetAmount` finite `> 0`; `horizonYears` `Number.isInteger` & `> 0`; `monthlyExpense` finite `>= 0`. Bila gagal → `throw Error` (pesan Bahasa Indonesia).
+2. **`monthsN = horizonYears * 12`** (Req 18.1).
+3. **`ditabung = max(0, targetAmount − currentSavings) / monthsN`** (Req 18.2).
+4. **`alreadyReached = currentSavings >= targetAmount`**; bila benar → `ditabung = 0` (Req 18.3). (Konsisten: `max(0, target−savings)=0` saat `savings>=target`.)
+5. **`kebutuhan`** (Req 18.4, 18.5):
+   - WHERE `monthlyExpense` finite `> 0` → `kebutuhan = monthlyExpense`.
+   - ELSE (0/tidak valid/absen) → `kebutuhan = Math.round(0.65 * (monthlyIncome − ditabung))` (rasio fallback atas sisa setelah `Ditabung`).
+6. **`keinginan = monthlyIncome − ditabung − kebutuhan`** (Req 18.6). Bisa negatif (dipakai `feasibility`).
+7. **`Derived_Percentage`** (Req 19.1): `ditabungPct = ditabung/monthlyIncome*100`; `kebutuhanPct = kebutuhan/monthlyIncome*100`; `keinginanPct = keinginan/monthlyIncome*100`. (Karena `monthlyIncome > 0` dijamin guard, tidak ada pembagian nol.)
+8. **`lines`**: tiga `BudgetLine` berurutan — Kebutuhan (`isSavings:false`), Keinginan (`isSavings:false`), Ditabung (`isSavings:true`) — dengan `amount` = nominal presisi dan `percentage` = `Derived_Percentage` masing-masing.
+9. **`feasibility`** (Req 20), dievaluasi berurutan:
+   - `ditabung > monthlyIncome` → `{ feasible:false, severity:"impossible", reason: "…menabung sebesar ini melebihi pemasukan; perpanjang jangka waktu atau turunkan target." }` (Req 20.2).
+   - ELSE bila `ditabung + kebutuhan > monthlyIncome` → `{ feasible:false, severity:"tight" | … }` — target belum layak. Karena `ditabung+kebutuhan>income ⇔ keinginan<0`, ini termasuk kondisi `tight` (lihat berikut). Untuk kejelasan tingkat: bila `keinginan < 0` klasifikasikan `tight` dengan `feasible:false` dan saran memperpanjang horizon/menurunkan target (Req 20.1).
+   - ELSE bila `keinginan < AMBANG` (`AMBANG = 0.05 * monthlyIncome`) → `{ feasible:true, severity:"tight", reason: "…sedikit/tidak ada sisa untuk keinginan; pertimbangkan menyesuaikan target atau jangka waktu." }` (Req 20.3). Catatan: bila `keinginan < 0` maka `feasible:false` (baris sebelumnya); bila `0 <= keinginan < AMBANG` maka `feasible:true, severity:"tight"`.
+   - ELSE → `{ feasible:true, severity:"ok", reason:"" }` (Req 20.4).
+
+   Ringkasnya (aturan tunggal yang konsisten dengan Req 20): `impossible` iff `ditabung>income`; jika bukan impossible, `feasible = (ditabung+kebutuhan <= income)`; `severity = "ok"` iff (`feasible` benar DAN `keinginan >= AMBANG`), selain itu `severity = "tight"`.
+10. **Presisi (Req 18.7, 19.3):** `ditabung`, `kebutuhan` (kecuali fallback yang di-`round` sesuai Req 18.5), dan `keinginan` disimpan presisi; saat `ok`, `kebutuhan + keinginan + ditabung = monthlyIncome` (eksak untuk aritmetika riil; deviasi hanya galat float kecil + pembulatan `kebutuhan` fallback), dan jumlah `Derived_Percentage` = 100 dalam toleransi kecil.
+
+### Modul yang Dipensiunkan vs Dipertahankan
+
+| Berkas | Status Goal-Driven | Catatan |
+|---|---|---|
+| `lib/planner/goalBudget.ts` | **BARU (dipakai)** | Inti model goal-driven (`computeGoalBudget`). |
+| `types/planner.ts` | **DIUBAH** | Tambah `GoalBudgetInput`, `FeasibilitySeverity`, `GoalFeasibility`, `GoalBudgetResult`; tipe lama dipertahankan (superseded/unused). |
+| `lib/planner/presets.ts` | **PENSIUN (dipertahankan)** | `BUDGET_PRESETS`, `getPreset`, `buildCustomPreset` tak dipakai UI/API goal-driven. Boleh tetap di repo. |
+| `lib/planner/budget.ts` | **PENSIUN (dipertahankan)** | `computeBudget`/`computeBudgetFromPreset`/`savingsBucketAmount`/`evaluateShortfall` tak dipakai. |
+| `lib/planner/savingsProjection.ts` | **PENSIUN (dipertahankan)** | `monthsToReachTarget`/`requiredMonthlySaving` tak dipakai (model kini akumulasi murni tanpa anuitas). |
+
+Keputusan: berkas lama **tidak dihapus** (menghindari perubahan luas & menjaga histori), tetapi **tidak lagi terhubung** ke `app/api/budget/route.ts` maupun komponen Planner goal-driven.
+
+### Kontrak API Goal-Driven (`app/api/budget`)
+
+**`GET /api/budget`** (Req 21.2) — konteks awal form:
+- Alur: `getLatestProfile()` → `defaultMonthlyIncome = profile?.income ?? null`, `currentSavings = profile?.currentSavings ?? null`, `monthlyExpense = profile?.expense ?? null`. (Opsional: sertakan `latestPlan` bila dipertahankan.)
+- Sukses → 200 `{ defaultMonthlyIncome, currentSavings, monthlyExpense, latestPlan? }`.
+- `export const runtime = "nodejs"`; error DB → 500 pesan ramah.
+
+**`POST /api/budget`** (Req 21.3–21.7) — hitung + simpan:
+- Body: `{ monthlyIncome: number, targetAmount: number, horizonYears: number, userId?: string | null }`. `currentSavings` & `monthlyExpense` diambil dari profil server-side; `monthlyIncome` overrideable (default `income` profil).
+- Validasi (→ 400, Req 21.4): `monthlyIncome` finite `> 0`; `targetAmount` finite `> 0`; `horizonYears` `Number.isInteger` & `> 0`.
+- Alur:
+  1. `getLatestProfile()` → `currentSavings = profile?.currentSavings ?? 0`, `monthlyExpense = profile?.expense ?? 0`.
+  2. `result = computeGoalBudget({ monthlyIncome, currentSavings, targetAmount, horizonYears, monthlyExpense })` (guard error internal → 400 jaring pengaman).
+  3. Persist `BudgetPlan` (Req 21.6): `presetId = "goal"`, `baseAmount = monthlyIncome`, `savingsTargetAmount = targetAmount`, `savingsHorizonYears = horizonYears`, `breakdown = result.lines` (Json), `mode`/`includeSavings`/`investmentContribution` = null/diomit (Req 21.7). **Tanpa migrasi.**
+  4. Sukses → 200 `GoalBudgetResult` (tiga pos + `Derived_Percentage` + `feasibility` + `alreadyReached`).
+- Error DB → 500 pesan ramah; `runtime = "nodejs"` (Req 21.8).
+
+### Persistensi (Reuse Kolom `BudgetPlan`, Tanpa Migrasi)
+
+Model `BudgetPlan` **tidak berubah** (tidak ada kolom baru, tidak ada migrasi Prisma). Pemetaan goal-driven:
+
+| Kolom `BudgetPlan` | Nilai goal-driven |
+|---|---|
+| `presetId` (String) | `"goal"` (penanda) |
+| `baseAmount` (Float) | `monthlyIncome` |
+| `savingsTargetAmount` (Float?) | `targetAmount` |
+| `savingsHorizonYears` (Int?) | `horizonYears` |
+| `breakdown` (Json) | `result.lines` (tiga pos: nama, percentage=Derived_Percentage, amount, isSavings) |
+| `mode` (String) | null/diomit |
+| `includeSavings` (Boolean?) | null/diomit |
+| `investmentContribution` (Float?) | null/diomit |
+| `userId` (String?) | placeholder auth |
+
+`currentSavings` dan `monthlyExpense` **tidak** dipersistensi (turunan profil, dihitung ulang dari profil terbaru — konsisten dengan keputusan lama untuk tidak menyimpan nilai turunan).
+
+### Halaman & Komponen UI Goal-Driven
+
+- **`app/planner/page.tsx`** (server): tetap dibungkus `ProfileGate` (reuse), `dynamic = "force-dynamic"`, header bergaya sama, me-render `PlannerWizard` yang disederhanakan.
+- **`PlannerWizard.tsx`** (DIUBAH): **hapus** langkah `PresetPicker`. Disederhanakan menjadi **form → hasil** (2 langkah: "Tujuan & Pendapatan" → "Hasil", atau satu halaman). `GET /api/budget` untuk prefill `monthlyIncome`, `currentSavings` (konteks read-only), `monthlyExpense`; `POST /api/budget` untuk hitung/simpan; teruskan `GoalBudgetResult` ke result card.
+- **`GoalBudgetForm` (form baru / rework `BudgetForm.tsx`)**: field `monthlyIncome` (prefill dari `defaultMonthlyIncome`, Rupiah dengan pemisah ribuan via `formatThousands`/`parseThousands`), `targetAmount` (Rupiah, pemisah ribuan), `horizonYears` (bilangan bulat tahun). Tampilkan `currentSavings` **read-only** sebagai konteks. Semua wajib; validasi klien mencerminkan server (income>0, target>0, horizon bulat>0) — cegah submit bila tidak valid.
+- **`BudgetResultCard.tsx`** (DIUBAH): tampilkan tiga pos (Kebutuhan/Keinginan/Ditabung) dengan **nominal Rupiah + `Derived_Percentage`**, bar proporsi, baris "Ditabung Rp X/bulan untuk mencapai target Rp Y dalam Z tahun", status `alreadyReached`, dan **panel peringatan feasibility + saran** saat `severity` bukan `"ok"` (tight/impossible). Pertahankan token Miami blue, format Rupiah `Rp ${Math.round(v).toLocaleString("id-ID")}`, disclaimer edukatif.
+- **`PresetPicker.tsx`**: **dihapus dari alur** (tidak dirender). Berkas boleh tetap ada tetapi tidak diimpor wizard goal-driven.
+- **`app/page.tsx`**: tautan dashboard ke `/planner` **tidak berubah**.
+
+---
+
+## Overview (Model Preset/Persentase — SUPERSEDED, historis)
+
+> Bagian berikut (Overview lama, Architecture, Components preset, Data Models preset, Correctness Properties 1–16, Delta 1–3) mendeskripsikan **arah lama** dan **DISUPERSEKSI** oleh "Desain Model Goal-Driven" di atas. Dipertahankan untuk keterlacakan.
 
 **Budget Planner** menambahkan cakupan **Planner** ke aplikasi Financial Planner: alat penganggaran alokasi yang membagi pemasukan bulanan (`Base_Amount`) ke pos-pos anggaran menurut **metode preset** (`50/30/20`, `70/20/10`, `80/20`). Fitur ini menjawab pertanyaan pelengkap terhadap cakupan Investasi: *"Berapa yang sebaiknya saya alokasikan tiap bulan untuk kebutuhan, keinginan, dan tabungan?"*
 
@@ -685,3 +867,84 @@ Presisi & konservasi total: `computeBudgetFromPreset` memakai rumus yang sama (`
 - **`getPreset("custom")` melempar.** Menjaga `BUDGET_PRESETS` sebagai record 3 preset tetap; jalur custom sengaja tidak melewati `getPreset` melainkan `buildCustomPreset`, sehingga tipe record tetap ketat dan tidak ada entri "kosong" untuk custom.
 - **Tanpa migrasi, penanda `presetId "custom"`.** Karena `presetId` sudah `String` bebas dan `breakdown` sudah `Json`, komposisi custom terekam implisit tanpa menambah kolom. Ini menjaga Delta 3 murni pada lapisan logika/API/UI — konsisten dengan keputusan Delta 2 untuk tidak mempersistensi nilai turunan.
 - **Validasi ganda (klien + server).** Form mencegah submit saat total ≠ 100 demi umpan balik cepat; API tetap memvalidasi (dan `buildCustomPreset` menjadi penjaga akhir) demi keamanan terhadap permintaan langsung ke endpoint.
+
+---
+
+## Correctness Properties — Model Goal-Driven (OTORITATIF, Iterasi Goal-Driven)
+
+*A property is a characteristic or behavior that should hold true across all valid executions of a system — essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
+
+Bagian ini berlaku untuk pure function `computeGoalBudget` di `lib/planner/goalBudget.ts`, yang memiliki ruang input besar (`monthlyIncome`, `currentSavings`, `targetAmount`, `horizonYears`, `monthlyExpense` sembarang) — cocok untuk property-based testing. Lapisan API (baca profil, validasi 400, persistensi reuse kolom, gate) dan rendering UI diuji dengan integration/component test (lihat Testing Strategy), bukan properti.
+
+Penomoran **melanjutkan** setelah Property 16 (Delta 3 preset Custom yang kini disuperseksi). Setelah refleksi redundansi (lihat prework): akumulasi murni (Property 17), already-reached + clamp (Property 18), kebutuhan dua-cabang (Property 19), konservasi jumlah + persentase turunan digabung menjadi satu properti komprehensif (Property 20), klasifikasi feasibility satu-aturan (Property 21), dan penolakan input tidak valid (Property 22).
+
+### Property 17: Ditabung mengikuti akumulasi murni
+
+*For any* `GoalBudgetInput` yang valid (`monthlyIncome` berhingga > 0, `currentSavings` berhingga ≥ 0, `targetAmount` berhingga > 0, `horizonYears` bilangan bulat positif, `monthlyExpense` berhingga ≥ 0), `computeGoalBudget` SHALL mengembalikan `ditabung` yang sama dengan `max(0, targetAmount − currentSavings) ÷ (horizonYears × 12)` dalam toleransi numerik relatif kecil, dan `ditabung` SHALL tidak pernah negatif.
+
+**Validates: Requirements 18.1, 18.2**
+
+### Property 18: Sudah tercapai → Ditabung nol
+
+*For any* `GoalBudgetInput` valid dengan `currentSavings ≥ targetAmount`, `computeGoalBudget` SHALL mengembalikan `ditabung` bernilai 0 dan `alreadyReached` bernilai benar.
+
+**Validates: Requirements 18.3**
+
+### Property 19: Kebutuhan dari expense dengan rasio fallback
+
+*For any* `GoalBudgetInput` valid: jika `monthlyExpense` berhingga > 0, `computeGoalBudget` SHALL menetapkan `kebutuhan` sama dengan `monthlyExpense`; jika `monthlyExpense` bernilai 0, `computeGoalBudget` SHALL menetapkan `kebutuhan` sama dengan `Math.round(0.65 × (monthlyIncome − ditabung))`.
+
+**Validates: Requirements 18.4, 18.5**
+
+### Property 20: Konservasi pos dan persentase turunan (kondisi layak)
+
+*For any* `GoalBudgetInput` valid, `computeGoalBudget` SHALL memenuhi identitas `keinginan = monthlyIncome − ditabung − kebutuhan` dan `Derived_Percentage` tiap pos sama dengan `pos ÷ monthlyIncome × 100`; DAN untuk input yang menghasilkan `feasibility.severity` bernilai `"ok"`, jumlah `kebutuhan + keinginan + ditabung` SHALL sama dengan `monthlyIncome` dan jumlah `ditabungPct + kebutuhanPct + keinginanPct` SHALL sama dengan 100, keduanya dalam toleransi numerik kecil.
+
+**Validates: Requirements 18.6, 19.1, 19.3**
+
+### Property 21: Klasifikasi feasibility konsisten
+
+*For any* `GoalBudgetInput` valid, `computeGoalBudget` SHALL menetapkan `feasibility` menurut aturan tunggal: `severity` bernilai `"impossible"` jika dan hanya jika `ditabung > monthlyIncome`; jika bukan impossible maka `feasible` bernilai benar jika dan hanya jika `ditabung + kebutuhan ≤ monthlyIncome`; dan `severity` bernilai `"ok"` jika dan hanya jika (`feasible` benar DAN `keinginan ≥ 0.05 × monthlyIncome`), selain itu `severity` bernilai `"tight"`.
+
+**Validates: Requirements 20.1, 20.2, 20.3, 20.4**
+
+### Property 22: Input tidak valid ditolak
+
+*For any* input yang melanggar setidaknya satu guard — `monthlyIncome` bukan angka berhingga > 0, `currentSavings` bukan angka berhingga ≥ 0, `targetAmount` bukan angka berhingga > 0, `horizonYears` bukan bilangan bulat positif berhingga, atau `monthlyExpense` bukan angka berhingga ≥ 0 — `computeGoalBudget` SHALL melempar error alih-alih mengembalikan hasil.
+
+**Validates: Requirements 17.6, 17.7, 17.8, 17.9, 17.10**
+
+## Error Handling — Model Goal-Driven (OTORITATIF)
+
+| Kondisi | Deteksi | Respons | Req |
+|---|---|---|---|
+| Profil belum ada saat akses Planner | `Profile_Gate` cek `getLatestProfile()` | Redirect ke `/profile` | 21.1 |
+| `monthlyIncome` bukan berhingga > 0 | Guard `computeGoalBudget` + validasi API | Lempar error → HTTP 400 + JSON error ramah | 17.6, 21.4 |
+| `targetAmount` bukan berhingga > 0 | Guard `computeGoalBudget` + validasi API | HTTP 400 + JSON error ramah | 17.7, 21.4 |
+| `horizonYears` bukan bilangan bulat positif | `Number.isInteger` & > 0 di API + guard | HTTP 400 + JSON error ramah | 17.8, 21.4 |
+| `currentSavings` bukan berhingga ≥ 0 | Guard `computeGoalBudget` (nilai profil di-normalisasi `?? 0`) | Lempar error → HTTP 400 (jaring pengaman) | 17.9 |
+| `monthlyExpense` bukan berhingga ≥ 0 | Guard `computeGoalBudget` (nilai profil di-normalisasi `?? 0`) | Lempar error → HTTP 400 (jaring pengaman) | 17.10 |
+| `currentSavings ≥ targetAmount` (sudah tercapai) | Perhitungan `computeGoalBudget` | `ditabung 0` + `alreadyReached true` → UI tampil "sudah tercapai" | 18.3 |
+| `ditabung > monthlyIncome` (mustahil) | Klasifikasi feasibility | `severity "impossible"` + saran → panel peringatan terkuat | 20.2 |
+| `ditabung + kebutuhan > monthlyIncome` / `keinginan` sangat kecil | Klasifikasi feasibility | `severity "tight"` (+ `feasible false` bila keinginan < 0) + saran perpanjang horizon/turunkan target | 20.1, 20.3 |
+| Operasi database gagal | `try/catch` di route | HTTP 500 + pesan ramah tanpa detail internal | 21.8 |
+
+## Testing Strategy — Model Goal-Driven (OTORITATIF)
+
+**Pendekatan ganda** (konsisten dengan pola `financial-planner`):
+
+- **Property-based tests** (Vitest + `fast-check`, minimum 100 iterasi) untuk logika murni `lib/planner/goalBudget.ts` (`computeGoalBudget`) — Property 17–22. Setiap test diberi tag `Feature: budget-planner, Property {n}: {teks properti}` dan merujuk nomor properti pada dokumen ini.
+  - **Generator input valid**: `monthlyIncome` `fc.double` berhingga > 0; `currentSavings`/`monthlyExpense` `fc.double` berhingga ≥ 0; `targetAmount` `fc.double` berhingga > 0; `horizonYears` `fc.integer` ≥ 1. Sub-generator: `currentSavings ≥ targetAmount` (Property 18); `monthlyExpense > 0` vs `= 0` (Property 19); input yang menghasilkan `severity "ok"` untuk cek konservasi (Property 20 — mis. income besar relatif terhadap ditabung+kebutuhan).
+  - **Generator input tidak valid** (Property 22): satu field dilanggar (`NaN`/`Infinity`/negatif untuk income/target; horizon non-integer/≤0; currentSavings/monthlyExpense negatif).
+- **Unit tests (example-based)**: `monthsN = horizonYears × 12` (contoh: 5 → 60); satu contoh diverifikasi manual (income/target/horizon/expense → ditabung/kebutuhan/keinginan/persen); nilai `presetId "goal"`.
+- **Integration/component tests** (1–3 contoh representatif, **bukan** properti — wiring):
+  - `GET /api/budget` mengembalikan `defaultMonthlyIncome`, `currentSavings`, `monthlyExpense` dari profil terbaru (Req 21.2).
+  - `POST /api/budget`: body valid → 200 `GoalBudgetResult` (memakai `currentSavings`/`expense` profil; `monthlyIncome` default income & override body — Req 21.3, 21.5); validasi `monthlyIncome`/`targetAmount`/`horizonYears` tidak valid → 400 (Req 21.4); persistensi `BudgetPlan` dengan `presetId "goal"`, `baseAmount=monthlyIncome`, `savingsTargetAmount=targetAmount`, `savingsHorizonYears=horizonYears`, `breakdown` Json, `mode`/`includeSavings`/`investmentContribution` null (Req 21.6, 21.7); error DB → 500 ramah (Req 21.8).
+  - `Profile_Gate` (reuse): redirect saat profil null (Req 21.1).
+  - `BudgetResultCard`: tiga pos (nominal + `Derived_Percentage`), bar proporsi, baris "Ditabung Rp X/bulan … dalam Z tahun", status `alreadyReached`, panel feasibility (tight/impossible) + saran, disclaimer, format Rupiah, Miami blue (Req 19.4, 20.6).
+  - `GoalBudgetForm`: field `monthlyIncome`/`targetAmount` (Rupiah pemisah ribuan), `horizonYears`, `currentSavings` read-only; validasi klien cegah submit bila tidak valid (component test).
+  - Dashboard menautkan `/planner` (tidak berubah).
+
+**Mengapa PBT hanya untuk `goalBudget.ts`:** fungsi murni dengan perilaku bervariasi terhadap input → 100 iterasi menemukan galat pembulatan, cabang fallback, batas feasibility. Persistensi PostgreSQL, konfigurasi Prisma, pembacaan profil, dan rendering UI **tidak** cocok PBT → integration/component test dengan contoh representatif.
+
+**TDD:** `goalBudget.ts` ditulis test-first sebelum API dan UI. Modul lama (`presets.ts`/`budget.ts`/`savingsProjection.ts`) dan Property 1–16 disuperseksi — test lama boleh dibiarkan atau ditandai skip; tidak ada test baru yang menargetkannya pada iterasi goal-driven.

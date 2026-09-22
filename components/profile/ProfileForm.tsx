@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Wallet, TrendingDown, PiggyBank, Loader2, CheckCircle2 } from "lucide-react";
+import { formatThousands, parseThousands } from "@/lib/format/rupiahInput";
 
 /** Field yang dikelola form beserta metadata tampilannya. */
 type FieldKey = "income" | "expense" | "currentSavings";
@@ -40,22 +41,15 @@ type FieldErrors = Partial<Record<FieldKey, string>>;
 
 const EMPTY_VALUES: FormValues = { income: "", expense: "", currentSavings: "" };
 
-/** Format angka ke ribuan Rupiah untuk pratinjau (mis. 10000 → "Rp 10.000"). */
-function formatRupiah(raw: string): string | null {
-  const n = Number(raw);
-  if (raw.trim() === "" || !Number.isFinite(n)) return null;
-  return `Rp ${n.toLocaleString("id-ID")}`;
-}
-
 /**
  * Validasi satu field: wajib diisi, harus angka, dan tidak negatif (Req 1.2).
+ * Nilai `value` adalah string bergrup ribuan; divalidasi via angka terparsir.
  * Mengembalikan pesan error dalam Bahasa Indonesia atau `undefined` bila valid.
  */
 function validateField(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (trimmed === "") return "Wajib diisi.";
-  const n = Number(trimmed);
-  if (!Number.isFinite(n)) return "Harus berupa angka.";
+  if (value.trim() === "") return "Wajib diisi.";
+  const n = parseThousands(value);
+  if (n === null) return "Harus berupa angka.";
   if (n < 0) return "Tidak boleh negatif.";
   return undefined;
 }
@@ -74,7 +68,8 @@ export default function ProfileForm() {
   const [success, setSuccess] = useState(false);
 
   function updateField(key: FieldKey, value: string) {
-    setValues((prev) => ({ ...prev, [key]: value }));
+    // Simpan nilai yang sudah bergrup ribuan agar tampil live saat mengetik.
+    setValues((prev) => ({ ...prev, [key]: formatThousands(value) }));
     // Bersihkan error field ini begitu pengguna mengetik ulang.
     setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev));
     if (apiError) setApiError(null);
@@ -104,9 +99,9 @@ export default function ProfileForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          income: Number(values.income),
-          expense: Number(values.expense),
-          currentSavings: Number(values.currentSavings),
+          income: parseThousands(values.income),
+          expense: parseThousands(values.expense),
+          currentSavings: parseThousands(values.currentSavings),
         }),
       });
 
@@ -141,7 +136,8 @@ export default function ProfileForm() {
     >
       {FIELDS.map(({ key, label, hint, icon: Icon }) => {
         const error = errors[key];
-        const preview = formatRupiah(values[key]);
+        // Pratinjau kini cukup mencerminkan nilai bergrup yang sedang diketik.
+        const preview = values[key] ? `Rp ${values[key]}` : null;
         const errorId = `${key}-error`;
         const hintId = `${key}-hint`;
         return (
@@ -153,7 +149,7 @@ export default function ProfileForm() {
               {label}
             </label>
             <div
-              className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(107,92,255,0.12)] ${
+              className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(0,180,216,0.12)] ${
                 error
                   ? "border-red-400"
                   : "border-border focus-within:border-[var(--accent)]/50"
@@ -166,10 +162,9 @@ export default function ProfileForm() {
               <input
                 id={key}
                 name={key}
-                type="number"
+                type="text"
                 inputMode="numeric"
-                min={0}
-                step="any"
+                autoComplete="off"
                 value={values[key]}
                 onChange={(e) => updateField(key, e.target.value)}
                 placeholder="0"

@@ -216,6 +216,61 @@ Rencana implementasi menambahkan cakupan **Planner** (penganggaran alokasi berba
 - [ ] 26. Checkpoint delta 3 — pastikan build & test hijau
   - Jalankan `npm run build` (harus bersih) dan `npm test` (logika Custom `buildCustomPreset`/`computeBudgetFromPreset` + suite lama hijau). Pastikan semua test lulus; tanyakan ke pengguna bila muncul pertanyaan.
 
+## Iterasi Goal-Driven (Requirements 17–21) — OTORITATIF
+
+> **Pivot arah Planner.** Task 27–32 berikut menerapkan **model goal-driven** yang **menggantikan** arah preset/persentase (Task 1–26 disuperseksi). Alur baru: pengguna memberi `monthlyIncome`, `targetAmount`, `horizonYears` (dan profil menyuplai `currentSavings` + `expense`), sistem **menghitung `Ditabung`** (akumulasi murni tanpa bunga) dan menurunkan persentase sebagai OUTPUT.
+>
+> **TIDAK ADA migrasi Prisma** — memakai ulang kolom `BudgetPlan` yang sudah ada dengan penanda `presetId = "goal"` (`baseAmount = monthlyIncome`, `savingsTargetAmount = targetAmount`, `savingsHorizonYears = horizonYears`, `breakdown` Json). Modul lama (`presets.ts`/`budget.ts`/`savingsProjection.ts`) **dipensiunkan tetapi dipertahankan** di repo (tidak dipakai UI/API goal-driven). `PresetPicker` dihapus dari alur. Bahasa implementasi: **TypeScript**. Urutan: tipe → logika murni (TDD) → API → UI → checkpoint. Sub-task bertanda `*` bersifat opsional (test).
+
+- [ ] 27. Tambah tipe goal-driven ke `types/planner.ts`
+  - Tambahkan (tanpa menghapus tipe lama yang kini superseded): `GoalBudgetInput` (`monthlyIncome`, `currentSavings`, `targetAmount`, `horizonYears`, `monthlyExpense`), `FeasibilitySeverity` (`"ok" | "tight" | "impossible"`), `GoalFeasibility` (`feasible`, `severity`, `reason`), dan `GoalBudgetResult` (`monthlyIncome`, `monthsN`, `ditabung`, `kebutuhan`, `keinginan`, `ditabungPct`, `kebutuhanPct`, `keinginanPct`, `lines: BudgetLine[]`, `alreadyReached`, `feasibility`). Reuse `BudgetLine` untuk ketiga pos (`percentage` = Derived_Percentage, `isSavings` true hanya Ditabung).
+  - _Requirements: 17.1, 19.2, 20.5_
+
+- [ ] 28. Fungsi murni `lib/planner/goalBudget.ts` (TDD)
+  - [ ] 28.1 Implementasikan `computeGoalBudget(input: GoalBudgetInput): GoalBudgetResult` (impor TIPE SAJA dari `@/types/planner`; jangan impor `presets/budget/savingsProjection`). Guard (throw): `monthlyIncome` berhingga > 0; `currentSavings` berhingga ≥ 0; `targetAmount` berhingga > 0; `horizonYears` `Number.isInteger` & > 0; `monthlyExpense` berhingga ≥ 0. Hitung `monthsN = horizonYears*12`; `ditabung = max(0, targetAmount − currentSavings)/monthsN`; `alreadyReached = currentSavings >= targetAmount`; `kebutuhan = monthlyExpense>0 ? monthlyExpense : Math.round(0.65*(monthlyIncome − ditabung))`; `keinginan = monthlyIncome − ditabung − kebutuhan`; `Derived_Percentage` tiap pos = `pos/monthlyIncome*100`; susun `lines` (Kebutuhan/Keinginan/Ditabung); `feasibility` per aturan tunggal (impossible iff `ditabung>income`; else `feasible = ditabung+kebutuhan<=income`; `severity "ok"` iff `feasible && keinginan>=0.05*income`, else `"tight"`) dengan `reason` saran Bahasa Indonesia. Pertahankan presisi (pembulatan hanya di tampilan; kebutuhan fallback di-`round` sesuai Req 18.5).
+    - _Requirements: 17.6, 17.7, 17.8, 17.9, 17.10, 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8, 19.1, 20.1, 20.2, 20.3, 20.4, 20.5_
+  - [ ]* 28.2 Property test: Ditabung mengikuti akumulasi murni (`= max(0,target−savings)/(horizon*12)`, tak pernah negatif).
+    - **Feature: budget-planner, Property 17: Ditabung mengikuti akumulasi murni**
+    - **Validates: Requirements 18.1, 18.2**
+  - [ ]* 28.3 Property test: sudah tercapai → Ditabung nol (`savings>=target` → `ditabung 0` & `alreadyReached`).
+    - **Feature: budget-planner, Property 18: Sudah tercapai → Ditabung nol**
+    - **Validates: Requirements 18.3**
+  - [ ]* 28.4 Property test: Kebutuhan dari expense dengan rasio fallback (`expense>0` → `kebutuhan==expense`; `expense==0` → `round(0.65*(income−ditabung))`).
+    - **Feature: budget-planner, Property 19: Kebutuhan dari expense dengan rasio fallback**
+    - **Validates: Requirements 18.4, 18.5**
+  - [ ]* 28.5 Property test: konservasi pos dan persentase turunan (`keinginan=income−ditabung−kebutuhan`, `pct=pos/income*100`; saat `ok` → sum pos = income & sum pct = 100 dalam toleransi).
+    - **Feature: budget-planner, Property 20: Konservasi pos dan persentase turunan (kondisi layak)**
+    - **Validates: Requirements 18.6, 19.1, 19.3**
+  - [ ]* 28.6 Property test: klasifikasi feasibility konsisten (impossible iff ditabung>income; feasible iff ditabung+kebutuhan<=income; ok iff feasible & keinginan>=5% income; else tight).
+    - **Feature: budget-planner, Property 21: Klasifikasi feasibility konsisten**
+    - **Validates: Requirements 20.1, 20.2, 20.3, 20.4**
+  - [ ]* 28.7 Property test: input tidak valid ditolak (salah satu guard dilanggar → throw).
+    - **Feature: budget-planner, Property 22: Input tidak valid ditolak**
+    - **Validates: Requirements 17.6, 17.7, 17.8, 17.9, 17.10**
+  - [ ]* 28.8 Unit test: `monthsN = horizonYears*12` (contoh 5 → 60) dan satu contoh end-to-end terverifikasi manual.
+    - _Requirements: 18.1_
+
+- [ ] 29. Rework `GET /api/budget` — konteks goal-driven
+  - [ ] 29.1 Ubah `app/api/budget/route.ts` GET agar mengembalikan `{ defaultMonthlyIncome: profile?.income ?? null, currentSavings: profile?.currentSavings ?? null, monthlyExpense: profile?.expense ?? null, latestPlan? }`. Pertahankan `runtime = "nodejs"` dan error DB → 500 ramah.
+    - _Requirements: 21.2, 21.8_
+
+- [ ] 30. Rework `POST /api/budget` — orkestrasi goal-driven
+  - [ ] 30.1 Ubah `app/api/budget/route.ts` POST agar menerima body `{ monthlyIncome, targetAmount, horizonYears, userId? }`. Validasi → 400: `monthlyIncome` berhingga > 0; `targetAmount` berhingga > 0; `horizonYears` `Number.isInteger` & > 0. Ambil `currentSavings = profile?.currentSavings ?? 0` dan `monthlyExpense = profile?.expense ?? 0` via `getLatestProfile()`. Panggil `computeGoalBudget({ monthlyIncome, currentSavings, targetAmount, horizonYears, monthlyExpense })` (guard error → 400 jaring pengaman). Persist `BudgetPlan` dengan `presetId "goal"`, `baseAmount = monthlyIncome`, `savingsTargetAmount = targetAmount`, `savingsHorizonYears = horizonYears`, `breakdown = result.lines` (Json), `mode`/`includeSavings`/`investmentContribution` null/diomit — **tanpa migrasi**. Hapus jalur preset/custom/mode/proyeksi/shortfall lama dari route. Kembalikan `GoalBudgetResult` (200). Error DB → 500 ramah; pertahankan `runtime = "nodejs"`.
+    - _Requirements: 21.3, 21.4, 21.5, 21.6, 21.7, 21.8_
+  - [ ]* 30.2 Integration test: body valid → 200 dengan tiga pos + persen + feasibility + alreadyReached (memakai currentSavings/expense profil; monthlyIncome default income & override body); `monthlyIncome`/`targetAmount`/`horizonYears` tidak valid → 400; persist `presetId "goal"` + reuse kolom (tanpa migrasi); GET kembalikan income/savings/expense; error DB → 500.
+    - _Requirements: 21.2, 21.3, 21.4, 21.5, 21.6, 21.7, 21.8_
+
+- [ ] 31. Rework UI Planner — form goal-driven, hasil, hapus PresetPicker
+  - [ ] 31.1 Rework `components/planner/BudgetForm.tsx` (atau buat `GoalBudgetForm`) menjadi form goal-driven: field `monthlyIncome` (prefill dari `defaultMonthlyIncome`, Rupiah pemisah ribuan via `lib/format/rupiahInput.ts`), `targetAmount` (Rupiah pemisah ribuan), `horizonYears` (bilangan bulat tahun); tampilkan `currentSavings` read-only sebagai konteks. Semua wajib; validasi klien mencerminkan server (income>0, target>0, horizon bulat>0) dan mencegah submit bila tidak valid. Sederhanakan `components/planner/PlannerWizard.tsx` menjadi form → hasil (hapus penggunaan `PresetPicker` dan langkah pemilihan preset/mode); wire ke `GET`/`POST /api/budget` baru dan teruskan `GoalBudgetResult` ke result card.
+    - _Requirements: 17.2, 17.3, 21.1_
+  - [ ] 31.2 Rework `components/planner/BudgetResultCard.tsx`: tampilkan tiga pos (Kebutuhan/Keinginan/Ditabung) dengan nominal Rupiah + `Derived_Percentage`, bar proporsi, baris "Ditabung Rp X/bulan untuk mencapai target Rp Y dalam Z tahun", status `alreadyReached`, dan panel peringatan feasibility + saran saat `severity` bukan `"ok"` (tight/impossible). Pertahankan format Rupiah `Rp ${Math.round(v).toLocaleString("id-ID")}`, token Miami blue, dan disclaimer edukatif; jaga keterbacaan mobile.
+    - _Requirements: 19.4, 20.6, 18.3_
+  - [ ]* 31.3 Component test: `GoalBudgetForm` menampilkan monthlyIncome/targetAmount/horizonYears + currentSavings read-only dan mencegah submit tidak valid; `BudgetResultCard` menampilkan tiga pos + persen + bar, baris target, status "sudah tercapai", dan panel feasibility (tight & impossible). `PresetPicker` tidak lagi dirender oleh wizard.
+    - _Requirements: 19.4, 20.6, 18.3_
+
+- [ ] 32. Checkpoint goal-driven — pastikan build & test hijau
+  - Jalankan `npm run build` (harus bersih) dan `npm test` (logika `goalBudget` + suite yang masih relevan hijau). Pastikan semua test lulus; tanyakan ke pengguna bila muncul pertanyaan.
+
 ## Notes
 
 - Task bertanda `*` bersifat opsional (test) dan dapat dilewati untuk MVP cepat.
@@ -226,6 +281,7 @@ Rencana implementasi menambahkan cakupan **Planner** (penganggaran alokasi berba
 - Setiap property test menyertakan tag `Feature: budget-planner, Property {n}: {teks}` dan merujuk properti pada `design.md`.
 - **Delta (Task 9–14):** dibangun di atas implementasi yang sudah hijau; migrasi Task 9 bersifat **aditif nullable** — jangan reset DB. `savingsProjection.ts` tetap murni (impor tipe saja). Nilai berhingga besar ditampilkan apa adanya; hanya laju tabungan nol tanpa pertumbuhan yang jadi status "tidak akan tercapai".
 - **Delta 2 (Task 15–20):** menambah parameter `presentValue` opsional (default 0) + toggle `Include_Savings` (default **mati**) di atas Delta 1 yang sudah selesai. Migrasi Task 15 (`includeSavings Boolean?`) bersifat **aditif nullable** — jangan reset DB. `savingsProjection.ts` tetap murni (impor tipe saja); `presentValue` selalu dihitung di lapisan API dari `Financial_Profile.currentSavings`, tidak dipersistensi. Property 10 menjaga ekuivalensi: dengan toggle mati (`PV = 0`), hasil identik dengan perilaku from-zero yang lama.
+- **Iterasi Goal-Driven (Task 27–32) — OTORITATIF:** membalik arah Planner ke **goal-driven** dan **menggantikan** Task 1–26 (preset/persentase, kini disuperseksi). **TIDAK ADA migrasi Prisma** — reuse kolom `BudgetPlan` dengan penanda `presetId = "goal"` (`baseAmount=monthlyIncome`, `savingsTargetAmount=targetAmount`, `savingsHorizonYears=horizonYears`, `breakdown` Json). Modul `presets.ts`/`budget.ts`/`savingsProjection.ts` **dipensiunkan tetapi dipertahankan** (tak dipakai UI/API goal-driven); `PresetPicker` dihapus dari alur. Inti perhitungan: **akumulasi murni tanpa bunga** di `lib/planner/goalBudget.ts` (`computeGoalBudget`), diuji Property 17–22 (`fast-check`, min. 100 iterasi). Persentase = OUTPUT (`Derived_Percentage`). Task 30.1 dan 29.1 sama-sama menyunting `app/api/budget/route.ts` → ditempatkan pada wave berbeda untuk menghindari konflik tulis; 31.1 dan 31.2 menyunting berkas berbeda sehingga boleh paralel.
 
 ## Task Dependency Graph
 
@@ -260,7 +316,15 @@ Wave 0–8 adalah alokasi (Task 1–8, sudah selesai). Wave 9–14 adalah delta 
     { "id": 23, "tasks": ["22.2"] },
     { "id": 24, "tasks": ["22.3", "22.4", "22.5", "22.6", "23.1"] },
     { "id": 25, "tasks": ["23.2", "24.1", "25.1"] },
-    { "id": 26, "tasks": ["25.2"] }
+    { "id": 26, "tasks": ["25.2"] },
+    { "id": 27, "tasks": ["27"] },
+    { "id": 28, "tasks": ["28.1"] },
+    { "id": 29, "tasks": ["28.2", "28.3", "28.4", "28.5", "28.6", "28.7", "28.8", "29.1"] },
+    { "id": 30, "tasks": ["30.1"] },
+    { "id": 31, "tasks": ["30.2", "31.1", "31.2"] },
+    { "id": 32, "tasks": ["31.3"] }
   ]
 }
 ```
+
+> **Catatan wave Iterasi Goal-Driven (27–32).** Wave 27–32 hanya berjalan setelah tipe goal-driven ada (Task 27) dan mengikuti urutan tipe → logika murni (`goalBudget.ts`) → API → UI, dengan test setelah kode yang diujinya. Task 29.1 (`GET`) dan 30.1 (`POST`) sama-sama menyunting `app/api/budget/route.ts` → ditempatkan pada wave berbeda (29 lalu 30) untuk menghindari konflik tulis. Task 31.1 (`BudgetForm`/`PlannerWizard`) dan 31.2 (`BudgetResultCard`) menyunting berkas berbeda → boleh paralel (wave 31). **Tidak ada migrasi Prisma** pada iterasi ini.

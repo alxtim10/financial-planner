@@ -1,5 +1,25 @@
 # Requirements Document
 
+## Perubahan Arah (Iterasi Goal-Driven) — OTORITATIF
+
+> **Pivot arah Planner.** Iterasi ini mengubah arah Planner secara mendasar dari **preset/persentase-driven** menjadi **goal-driven (berbasis tujuan)**. Sebelumnya pengguna memilih persentase (preset 50/30/20, 70/20/10, 80/20, atau Custom) dan target tabungan hanya efek samping. Sekarang alurnya **dibalik**: pengguna memberi **pemasukan bulanan, tabungan saat ini, nominal target, dan jangka waktu**, lalu sistem **MENGHITUNG berapa yang harus ditabung per bulan** — dan **persentase menjadi OUTPUT turunan**, bukan input.
+>
+> **Yang menjadi otoritatif:** **Requirement 17–21** (bagian "Model Goal-Driven" di bawah) adalah **sumber kebenaran** untuk perilaku Planner mulai iterasi ini. Model perhitungan inti: **akumulasi murni (plain accumulation) tanpa bunga/pertumbuhan**.
+>
+> **Yang disuperseksi (SUPERSEDED):** **Requirement 1–16** yang mendeskripsikan model **preset/persentase** (termasuk proyeksi target tabungan Arah A/B, present value/Include_Savings, dan preset Custom) **tidak lagi menjadi arah aktif Planner**. Nomor & teksnya **dipertahankan sebagai catatan historis** untuk keterlacakan, tetapi **tidak boleh diimplementasikan ulang** pada iterasi goal-driven.
+>
+> **Yang DIHAPUS dari alur Planner (goal-driven):**
+> - **3 preset tetap** (50/30/20, 70/20/10, 80/20) dan **mode persentase Custom** — persentase kini murni OUTPUT.
+> - **`PresetPicker`** dan seluruh UI pemilihan preset/persentase.
+> - **Mode tabungan `terpisah`/`kombinasi`** dan penandaan `Savings_Shortfall` berbasis kontribusi investasi.
+> - **Toggle `Include_Savings`** — `currentSavings` **selalu** dihitung sebagai saldo awal (starting balance), karena kini inti dari model.
+> - **Cabang "Arah A" (Time_To_Goal)** — `Savings_Horizon`/`horizonYears` kini **selalu wajib** (bukan opsional).
+> - **Persentase sebagai input** — dalam bentuk apa pun.
+>
+> **Catatan implementasi:** iterasi goal-driven **tidak memerlukan migrasi Prisma** — memakai ulang kolom `BudgetPlan` yang sudah ada (lihat Requirement 20) dengan penanda `presetId = "goal"`.
+
+---
+
 ## Introduction
 
 **Budget Planner** (cakupan **Planner**) adalah fitur baru pada aplikasi Financial Planner yang membantu pengguna **mengalokasikan pemasukan bulanan** ke dalam beberapa ember (bucket) pengeluaran dan tabungan berdasarkan **metode penganggaran preset** yang sudah teruji (mis. 50/30/20). Fitur ini melengkapi cakupan Investasi yang sudah ada dengan menjawab pertanyaan: *"Setiap bulan, berapa yang sebaiknya saya alokasikan untuk kebutuhan, keinginan, dan tabungan?"*
@@ -58,9 +78,28 @@ Cakupan Planner pada iterasi ini **hanya penganggaran alokasi (allocation budget
 - **Custom_Preset**: Opsi penganggaran keempat (di luar 3 preset tetap) yang memakai persentase yang ditentukan sendiri oleh pengguna untuk tiga kategori tetap **Kebutuhan**, **Keinginan**, dan **Ditabung**. Diidentifikasi dengan `presetId` bernilai `"custom"`. Berbeda dari `Budget_Preset` tetap, komposisinya dibangun saat runtime dari `Custom_Allocation` (bukan konstanta di `BUDGET_PRESETS`).
 - **Custom_Allocation**: Kumpulan tiga persentase yang diisi pengguna untuk `Custom_Preset` — `{ kebutuhan, keinginan, ditabung }` — masing-masing angka berhingga tidak negatif yang totalnya harus tepat 100. Menjadi input pembentuk `Custom_Preset`.
 
+### Glosarium Goal-Driven (OTORITATIF, Iterasi Goal-Driven)
+
+- **Goal_Budget**: Model penganggaran berbasis tujuan yang menjadi arah aktif Planner. Diberi `Monthly_Income`, `Current_Savings`, `Target_Amount`, dan `Horizon_Years`, sistem menghitung nominal `Ditabung` per bulan (akumulasi murni tanpa bunga) beserta `Kebutuhan` dan `Keinginan`, lalu menurunkan `Derived_Percentage` tiap pos sebagai OUTPUT.
+- **Monthly_Income**: Pemasukan bulanan (Rupiah) yang menjadi dasar `Goal_Budget`. Default dari `income` `Financial_Profile` terbaru; dapat ditimpa manual oleh pengguna. Wajib, angka berhingga > 0.
+- **Current_Savings**: Saldo tabungan pengguna saat ini (Rupiah), diambil dari `currentSavings` `Financial_Profile` terbaru. Diperlakukan sebagai **saldo awal (starting balance)** yang **selalu** dikurangkan dari `Target_Amount` (tanpa toggle). Angka berhingga ≥ 0.
+- **Target_Amount**: Nominal tabungan yang ingin dicapai pengguna (Rupiah). Wajib, angka berhingga > 0.
+- **Horizon_Years**: Jangka waktu untuk mencapai `Target_Amount`, dalam **tahun** (bilangan bulat positif). **Wajib** pada model goal-driven. `Months_N = Horizon_Years × 12`.
+- **Ditabung**: Nominal tabungan bulanan yang **dihitung** sistem: `max(0, Target_Amount − Current_Savings) ÷ Months_N`. Pos ini adalah `Savings_Bucket` goal-driven (`isSavings: true`).
+- **Kebutuhan**: Pos pengeluaran esensial bulanan (Rupiah). Diambil dari `expense` `Financial_Profile`; bila `expense` 0/tidak valid/tidak ada, memakai **rasio fallback** `round(0.65 × (Monthly_Income − Ditabung))` (rasio atas sisa pemasukan setelah `Ditabung`).
+- **Keinginan**: Pos sisa (Rupiah), didefinisikan sebagai `Monthly_Income − Ditabung − Kebutuhan`. Bisa bernilai negatif secara matematis pada kondisi tidak layak (dipakai untuk penilaian `Feasibility`).
+- **Derived_Percentage**: Persentase tiap pos sebagai **OUTPUT** turunan untuk tampilan: `pos ÷ Monthly_Income × 100` (Kebutuhan%, Keinginan%, Ditabung%). **Bukan** input pengguna.
+- **Already_Reached (Goal-Driven)**: Status saat `Current_Savings ≥ Target_Amount` sehingga `Ditabung = 0` — target sudah tercapai tanpa perlu menabung lagi.
+- **Feasibility**: Penilaian kelayakan `Goal_Budget` dengan tiga tingkat `severity`: `"ok"` (sehat), `"tight"` (ketat — sedikit/tidak ada sisa untuk `Keinginan`), dan `"impossible"` (mustahil — `Ditabung` saja melampaui `Monthly_Income`). Menyertakan `feasible: boolean` dan saran (memperpanjang `Horizon_Years` atau menurunkan `Target_Amount`).
+- **Goal_Budget_Result**: Objek hasil `computeGoalBudget` — memuat `Ditabung`, `Kebutuhan`, `Keinginan` (presisi Rupiah, pembulatan hanya di tampilan), `Derived_Percentage` tiap pos, `alreadyReached`, dan objek `feasibility`.
+
+> **Catatan supersession glosarium:** Istilah preset/persentase — `Budget_Preset`, `Custom_Preset`, `Custom_Allocation`, `Savings_Mode`, `Savings_Shortfall`, `Manual_Savings_Target`, `Include_Savings`, `Present_Value`, `Time_To_Goal`, `Required_Monthly_Saving`, `Savings_Projection`, `Growth_Rate` — **DISUPERSEKSI** pada iterasi goal-driven dan dipertahankan hanya sebagai konteks historis (Requirement 1–16). `Base_Amount` digantikan oleh `Monthly_Income`; `Savings_Bucket` kini selalu pos **Ditabung**.
+
 ---
 
 ## Requirements
+
+> **⚠️ SUPERSEDED — Requirement 1–16 (model preset/persentase).** Bagian berikut (Requirement 1 sampai 16) mendeskripsikan **arah lama** Planner berbasis preset/persentase (alokasi preset, mode terpisah/kombinasi + shortfall, proyeksi target tabungan Arah A/B, present value/Include_Savings, dan preset Custom). Mulai **Iterasi Goal-Driven**, bagian ini **DISUPERSEKSI** oleh **Requirement 17–21 (Model Goal-Driven)** di akhir dokumen dan **tidak lagi menjadi arah aktif**. Teks dipertahankan **hanya sebagai catatan historis/keterlacakan**; jangan mengimplementasikan ulang pada iterasi goal-driven. Requirement 1 (Profile_Gate), Requirement 8/9 (format Rupiah, disclaimer, gaya visual, tautan dashboard), dan Requirement 10 (pure function di `lib/planner/*`) tetap relevan secara prinsip dan **dinyatakan ulang** dalam Requirement 17–21.
 
 ### Requirement 1: Akses Planner Dilindungi Profil Finansial
 
@@ -261,3 +300,75 @@ Kapabilitas ini melengkapi Requirement 15 dengan lapisan API, persistensi, dan U
 8. THE Budget_Planner SHALL menampilkan kartu keempat "Custom" pada pemilih preset; WHEN kartu Custom dipilih, THE Budget_Planner SHALL menampilkan tiga input persentase (Kebutuhan, Keinginan, Ditabung) beserta indikator total berjalan.
 9. WHILE jumlah tiga input persentase Custom tidak sama dengan 100, THE Budget_Planner SHALL menandai kondisi tersebut pada form dan mencegah pengiriman perhitungan (validasi sisi klien) hingga totalnya tepat 100.
 10. WHEN `Budget_Breakdown` untuk `Custom_Preset` tersedia, THE Budget_Planner SHALL menampilkan rincian per pos dengan label "Custom" mengikuti pola tampilan hasil yang sama dengan preset tetap.
+
+---
+
+## Requirements — Model Goal-Driven (OTORITATIF, Iterasi Goal-Driven)
+
+> Requirement 17–21 adalah **sumber kebenaran** untuk perilaku Planner mulai iterasi ini dan **menggantikan** Requirement 1–16. Model perhitungan inti: **akumulasi murni (plain accumulation) tanpa bunga/pertumbuhan**. Pembulatan Rupiah hanya di lapisan tampilan.
+
+### Requirement 17: Input Goal-Driven Wajib
+
+**User Story:** Sebagai pengguna, saya ingin memberi pemasukan bulanan, tabungan saat ini, nominal target, dan jangka waktu, sehingga sistem dapat menghitung berapa yang harus saya tabung tiap bulan untuk mencapai target itu.
+
+#### Acceptance Criteria
+1. THE Goal_Budget SHALL menerima empat input: `Monthly_Income` (Rupiah), `Current_Savings` (Rupiah), `Target_Amount` (Rupiah), dan `Horizon_Years` (bilangan bulat tahun), yang seluruhnya wajib pada model goal-driven.
+2. WHEN halaman Planner dimuat DAN `Financial_Profile` terbaru tersedia, THE Goal_Budget SHALL menggunakan `income` dari `Financial_Profile` terbaru sebagai nilai default `Monthly_Income`.
+3. WHEN pengguna memasukkan nilai `Monthly_Income` manual, THE Goal_Budget SHALL menggunakan nilai manual tersebut untuk perhitungan alih-alih `income` profil.
+4. THE Goal_Budget SHALL mengambil `Current_Savings` dari `currentSavings` `Financial_Profile` terbaru (atau 0 bila tidak tersedia) dan memperlakukannya sebagai saldo awal secara tetap, tanpa toggle apa pun.
+5. THE Goal_Budget SHALL mengambil `Kebutuhan` dasar dari `expense` `Financial_Profile` terbaru sebagai pengeluaran esensial bulanan pengguna.
+6. IF `Monthly_Income` bukan angka berhingga yang lebih besar dari 0, THEN THE Goal_Budget SHALL menolak perhitungan dan mengembalikan pesan validasi.
+7. IF `Target_Amount` bukan angka berhingga yang lebih besar dari 0, THEN THE Goal_Budget SHALL menolak perhitungan dan mengembalikan pesan validasi.
+8. IF `Horizon_Years` bukan bilangan bulat positif berhingga, THEN THE Goal_Budget SHALL menolak perhitungan dan mengembalikan pesan validasi.
+9. IF `Current_Savings` bukan angka berhingga yang tidak negatif, THEN THE Goal_Budget SHALL menolak perhitungan dan mengembalikan pesan validasi.
+10. IF `monthlyExpense` (input `Kebutuhan` dasar) bukan angka berhingga yang tidak negatif, THEN THE Goal_Budget SHALL menolak perhitungan dan mengembalikan pesan validasi.
+
+### Requirement 18: Perhitungan Ditabung dan Pos (Akumulasi Murni)
+
+**User Story:** Sebagai pengguna, saya ingin sistem menghitung nominal tabungan bulanan, kebutuhan, dan keinginan secara pasti dari input saya, sehingga saya tahu berapa Rupiah tiap pos tanpa harus menebak persentase.
+
+#### Acceptance Criteria
+1. THE Goal_Budget SHALL menghitung `Months_N` sebagai `Horizon_Years × 12`.
+2. THE Goal_Budget SHALL menghitung `Ditabung` sebagai `max(0, (Target_Amount − Current_Savings)) ÷ Months_N` (akumulasi murni tanpa bunga atau pertumbuhan).
+3. IF `Current_Savings` lebih besar dari atau sama dengan `Target_Amount`, THEN THE Goal_Budget SHALL menetapkan `Ditabung` bernilai 0 dan menandai status `Already_Reached` bernilai benar.
+4. WHERE `expense` `Financial_Profile` bernilai angka berhingga lebih besar dari 0, THE Goal_Budget SHALL menggunakan nilai `expense` tersebut sebagai `Kebutuhan`.
+5. IF `expense` `Financial_Profile` bernilai 0, tidak valid, atau tidak tersedia, THEN THE Goal_Budget SHALL menghitung `Kebutuhan` sebagai `round(0.65 × (Monthly_Income − Ditabung))` (rasio fallback atas sisa pemasukan setelah `Ditabung`).
+6. THE Goal_Budget SHALL menghitung `Keinginan` sebagai `Monthly_Income − Ditabung − Kebutuhan`.
+7. THE Goal_Budget SHALL mempertahankan nilai `Ditabung`, `Kebutuhan`, dan `Keinginan` secara presisi (tanpa pembulatan) di dalam hasil perhitungan; pembulatan ke Rupiah dilakukan hanya di lapisan tampilan.
+8. THE fungsi perhitungan goal-driven SHALL berupa pure function di `lib/planner/` (mis. `goalBudget.ts`) tanpa dependensi UI, API, atau database, dan hanya mengimpor tipe dari `@/types/planner`.
+
+### Requirement 19: Persentase Turunan sebagai Output
+
+**User Story:** Sebagai pengguna, saya ingin melihat persentase tiap pos sebagai hasil dari rencana saya, sehingga saya memahami proporsi anggaran tanpa harus menentukannya sendiri.
+
+#### Acceptance Criteria
+1. THE Goal_Budget SHALL menurunkan `Derived_Percentage` tiap pos sebagai `pos ÷ Monthly_Income × 100` untuk `Kebutuhan`, `Keinginan`, dan `Ditabung`.
+2. THE Goal_Budget SHALL memperlakukan `Derived_Percentage` sebagai OUTPUT tampilan dan SHALL NOT menerima persentase apa pun sebagai input pengguna.
+3. WHEN hasil `Goal_Budget` layak (`feasibility.severity` bernilai `"ok"`), THE Goal_Budget SHALL memastikan jumlah nominal ketiga pos sama dengan `Monthly_Income` dalam toleransi pembulatan kecil, dan jumlah ketiga `Derived_Percentage` sama dengan 100 dalam toleransi pembulatan kecil.
+4. THE Goal_Budget SHALL menampilkan ketiga pos beserta nominal Rupiah dan `Derived_Percentage` masing-masing pada tampilan hasil, dengan sebuah bar proporsi.
+
+### Requirement 20: Penilaian Kelayakan (Feasibility)
+
+**User Story:** Sebagai pengguna, saya ingin diberi tahu bila target dan jangka waktu saya tidak realistis terhadap pemasukan saya, sehingga saya dapat menyesuaikan rencana.
+
+#### Acceptance Criteria
+1. IF `Ditabung + Kebutuhan` lebih besar dari `Monthly_Income`, THEN THE Goal_Budget SHALL menandai target tidak layak (`feasible` salah) dan menyertakan saran untuk memperpanjang `Horizon_Years` atau menurunkan `Target_Amount`.
+2. IF `Ditabung` saja lebih besar dari `Monthly_Income`, THEN THE Goal_Budget SHALL menetapkan `feasibility.severity` bernilai `"impossible"` sebagai peringatan terkuat.
+3. WHERE `Ditabung` tidak melampaui `Monthly_Income` TETAPI `Keinginan` lebih kecil dari ambang kecil (mis. lebih kecil dari 5% dari `Monthly_Income`, termasuk nilai negatif), THE Goal_Budget SHALL menetapkan `feasibility.severity` bernilai `"tight"` dan memperingatkan bahwa sedikit atau tidak ada sisa untuk `Keinginan` beserta saran penyesuaian.
+4. WHERE `Ditabung + Kebutuhan` tidak melampaui `Monthly_Income` DAN `Keinginan` tidak lebih kecil dari ambang kecil, THE Goal_Budget SHALL menetapkan `feasibility.severity` bernilai `"ok"` (`feasible` benar) dan menampilkan ketiga pos tanpa peringatan.
+5. THE Goal_Budget SHALL menyertakan objek `feasibility` (`{ feasible, severity, reason }`) di dalam `Goal_Budget_Result` sehingga tampilan hasil dapat merender peringatan dan saran yang sesuai.
+6. THE tampilan hasil SHALL memformat seluruh nilai uang sebagai Rupiah gaya Indonesia dengan pola `Rp ${Math.round(v).toLocaleString("id-ID")}`, menyertakan disclaimer edukatif, menggunakan token warna Miami blue (`--accent`, `--accent-2`, `--accent-soft`), dan tetap terbaca pada viewport mobile.
+
+### Requirement 21: Kontrak API dan Persistensi Goal-Driven (Reuse Kolom)
+
+**User Story:** Sebagai pengguna, saya ingin rencana goal-driven saya dihitung di server dan tersimpan, sehingga saya dapat meninjau kembali dan sistem tetap konsisten dengan profil saya.
+
+#### Acceptance Criteria
+1. THE Planner SHALL tetap dilindungi `Profile_Gate` server-side yang sama; WHEN pengguna mengakses `/planner` tanpa `Financial_Profile`, THE Profile_Gate SHALL mengarahkan ke halaman pengisian profil.
+2. THE `GET /api/budget` SHALL mengembalikan `defaultMonthlyIncome` (dari `income` profil terbaru atau null), `currentSavings` (dari profil atau null), dan `monthlyExpense` (dari `expense` profil atau null), sehingga form dapat menampilkan pemasukan, tabungan saat ini, dan pengeluaran esensial.
+3. THE `POST /api/budget` SHALL menerima body `{ monthlyIncome, targetAmount, horizonYears, userId? }`, sementara `Current_Savings` dan `monthlyExpense` diambil dari `Financial_Profile` terbaru di sisi server; `monthlyIncome` dapat ditimpa dari body dengan default `income` profil.
+4. IF `monthlyIncome` bukan angka berhingga > 0, ATAU `targetAmount` bukan angka berhingga > 0, ATAU `horizonYears` bukan bilangan bulat positif, THEN THE `POST /api/budget` SHALL mengembalikan HTTP 400 dengan pesan validasi ramah Bahasa Indonesia.
+5. WHEN input valid, THE `POST /api/budget` SHALL menghitung hasil melalui `computeGoalBudget` (mengambil `expense` dan `currentSavings` dari profil) dan mengembalikan `Goal_Budget_Result` (tiga pos + `Derived_Percentage` + `feasibility` + `alreadyReached`) dengan HTTP 200.
+6. WHEN menyimpan rencana, THE `POST /api/budget` SHALL mempersistensi ke `BudgetPlan` dengan memakai ulang kolom yang sudah ada: `baseAmount = monthlyIncome`, `savingsTargetAmount = targetAmount`, `savingsHorizonYears = horizonYears`, `breakdown = ketiga baris pos hasil perhitungan (Json)`, dan `presetId = "goal"` sebagai penanda, tanpa migrasi Prisma.
+7. THE `POST /api/budget` SHALL mengizinkan kolom `mode`, `includeSavings`, dan `investmentContribution` bernilai null/diomit pada penyimpanan rencana goal-driven.
+8. THE API route SHALL mempertahankan `runtime = "nodejs"`, penanganan error database dengan HTTP 500 berpesan ramah tanpa mengekspos detail internal, dan penggunaan Prisma Client singleton (`lib/db.ts`).

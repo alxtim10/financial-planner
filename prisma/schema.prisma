@@ -24,6 +24,7 @@ model FinancialProfile {
 model Goal {
   id           String   @id @default(cuid())
   userId       String?
+  name         String? // label opsional, mis. "Beli Rumah"
   targetAmount Float
   horizonYears Int
   createdAt    DateTime @default(now())

@@ -77,3 +77,40 @@ export interface SavingsProjection {
   allocationSufficient: boolean | null; // monthlySavingRate >= requiredMonthly
   monthlyGap: number | null; // max(0, requiredMonthly - monthlySavingRate)
 }
+
+// ============================================================================
+// Tipe Domain Goal-Driven (Req 17–21) — TAMBAHAN.
+// Tipe preset/persentase di atas TETAP ADA tetapi disuperseksi untuk alur ini.
+// `BudgetLine` (di atas) dipakai ulang untuk ketiga pos; `percentage` = Derived_Percentage.
+// ============================================================================
+
+// Input goal-driven yang diterima computeGoalBudget (nilai presisi, Rupiah).
+export interface GoalBudgetInput {
+  monthlyIncome: number; // > 0, berhingga
+  currentSavings: number; // >= 0, berhingga (saldo awal, selalu dihitung)
+  targetAmount: number; // > 0, berhingga
+  horizonYears: number; // bilangan bulat positif
+  monthlyExpense: number; // >= 0, berhingga (0 → fallback rasio)
+}
+
+export type FeasibilitySeverity = "ok" | "tight" | "impossible";
+
+export interface GoalFeasibility {
+  feasible: boolean; // false bila ditabung+kebutuhan > income
+  severity: FeasibilitySeverity; // "ok" | "tight" | "impossible"
+  reason: string; // pesan + saran (Bahasa Indonesia) untuk UI
+}
+
+export interface GoalBudgetResult {
+  monthlyIncome: number; // echo input (dasar Derived_Percentage)
+  monthsN: number; // horizonYears * 12
+  ditabung: number; // akumulasi murni per bulan (tak pernah negatif)
+  kebutuhan: number; // dari monthlyExpense atau fallback rasio
+  keinginan: number; // monthlyIncome - ditabung - kebutuhan
+  ditabungPct: number; // Derived_Percentage
+  kebutuhanPct: number; // Derived_Percentage
+  keinginanPct: number; // Derived_Percentage
+  lines: BudgetLine[]; // tiga pos (Kebutuhan/Keinginan/Ditabung); percentage = Derived_Percentage; isSavings true hanya untuk Ditabung
+  alreadyReached: boolean; // currentSavings >= targetAmount → ditabung 0
+  feasibility: GoalFeasibility;
+}

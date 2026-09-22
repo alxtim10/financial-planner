@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 export const runtime = "nodejs";
 
 interface GoalRequest {
+  name?: unknown;
   targetAmount?: unknown;
   horizonYears?: unknown;
   userId?: string | null;
@@ -11,8 +12,9 @@ interface GoalRequest {
 
 /**
  * POST /api/goal — simpan Goal.
+ * Menerima `name` opsional (di-trim; string kosong → null).
  * Validasi: targetAmount finit & > 0; horizonYears finit, integer, & > 0.
- * Sukses → 201 { id, targetAmount, horizonYears }.
+ * Sukses → 201 { id, name, targetAmount, horizonYears }.
  */
 export async function POST(req: Request) {
   let body: GoalRequest;
@@ -22,7 +24,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Permintaan tidak valid." }, { status: 400 });
   }
 
-  const { targetAmount, horizonYears, userId = null } = body;
+  const { name: rawName, targetAmount, horizonYears, userId = null } = body;
+
+  // Normalisasi name: bila string → trim, string kosong → null; selain itu null.
+  const name = typeof rawName === "string" && rawName.trim() !== "" ? rawName.trim() : null;
 
   // Validasi targetAmount: harus angka finit dan lebih besar dari 0.
   if (typeof targetAmount !== "number" || !Number.isFinite(targetAmount) || targetAmount <= 0) {
@@ -48,11 +53,12 @@ export async function POST(req: Request) {
 
   try {
     const goal = await prisma.goal.create({
-      data: { targetAmount, horizonYears, userId },
+      data: { name, targetAmount, horizonYears, userId: userId ?? null },
     });
     return NextResponse.json(
       {
         id: goal.id,
+        name: goal.name,
         targetAmount: goal.targetAmount,
         horizonYears: goal.horizonYears,
       },
@@ -69,6 +75,7 @@ export async function POST(req: Request) {
 
 /**
  * GET /api/goal — ambil goal terakhir (createdAt desc).
+ * Mengembalikan seluruh baris Goal (termasuk `name`) tanpa proyeksi field.
  * Sukses → 200 { goal: Goal | null }.
  */
 export async function GET() {

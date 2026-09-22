@@ -174,7 +174,7 @@ export default function ChatInterface() {
         <div className="mx-auto w-full max-w-3xl px-4">
           <form
             onSubmit={onSubmit}
-            className="flex items-end gap-2 rounded-[1.75rem] border border-border bg-surface p-2 shadow-[0_2px_20px_rgba(0,0,0,0.04)] transition-shadow focus-within:shadow-[0_2px_28px_rgba(107,92,255,0.12)]"
+            className="flex items-end gap-2 rounded-[1.75rem] border border-border bg-surface p-2 shadow-[0_2px_20px_rgba(0,0,0,0.04)] transition-shadow focus-within:shadow-[0_2px_28px_rgba(0,180,216,0.12)]"
           >
             <textarea
               ref={textareaRef}

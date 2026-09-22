@@ -11,6 +11,8 @@ import {
   Wallet,
 } from "lucide-react";
 import { getLatestProfile } from "@/lib/profileGate";
+import { getActiveGoal } from "@/lib/goal";
+import ActiveGoalCard from "@/components/goal/ActiveGoalCard";
 
 // Halaman ini membaca Financial_Profile dari DB (Prisma) saat request.
 // Paksa render dinamis agar `next build` tidak mencoba melakukan query DB
@@ -40,6 +42,7 @@ function formatRupiah(value: number): string {
 export default async function Home() {
   const profile = await getLatestProfile();
   const hasProfile = profile !== null;
+  const activeGoal = await getActiveGoal();
 
   return (
     <div className="min-h-dvh bg-background">
@@ -155,6 +158,20 @@ export default async function Home() {
             </div>
           )}
         </section>
+
+        {/* ── Kartu Tujuan Aktif (Req 4.5) ────────────────────── */}
+        <ActiveGoalCard
+          activeGoal={
+            activeGoal
+              ? {
+                  id: activeGoal.id,
+                  name: activeGoal.name,
+                  targetAmount: activeGoal.targetAmount,
+                  horizonYears: activeGoal.horizonYears,
+                }
+              : null
+          }
+        />
 
         {/* ── Kartu navigasi ──────────────────────────────────── */}
         <section aria-label="Navigasi" className="mb-8">
