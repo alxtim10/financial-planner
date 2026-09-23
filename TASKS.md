@@ -1,41 +1,56 @@
-> **Catatan arah produk:** Dokumen ini mendeskripsikan tugas implementasi **fitur chatbot pelengkap (complementary)** dari fase PoC. Arah produk keseluruhan kini adalah aplikasi perencana keuangan terstruktur (fokus MVP: cakupan Investasi); rencana implementasi terbaru ada di `.kiro/specs/financial-planner/tasks.md`. Lihat [`dokumentasi.md`](./dokumentasi.md) untuk arah dan gambaran keseluruhan yang otoritatif.
+# Future Enhancements & Roadmap Backlog: TabungOne
 
-# Implementation Tasks Breakdown
+> **Dokumen Terkait:** Gambaran arah produk keseluruhan dapat dilihat pada [`dokumentasi.md`](./dokumentasi.md). File ini berfungsi sebagai *backlog* rencana fitur dan peningkatan teknis berikutnya.
 
-## Phase 1: Inisialisasi Proyek & Konfigurasi Lingkungan
-- [ ] Inisialisasi Next.js app (`npx create-next-app@latest financial-planner-poc`).
-- [ ] Pilih opsi: TypeScript (Yes), Tailwind CSS (Yes), App Router (Yes).
-- [ ] Install dependencies utama: `npm install @google/genai react-markdown remark-gfm lucide-react`.
-- [ ] Siapkan file `.env.local` dan masukkan kredensial `GEMINI_API_KEY`.
-- [ ] Bersihkan *boilerplate* kode default Next.js pada `app/page.tsx` dan `app/globals.css`.
+---
 
-## Phase 2: Konstruksi Backend (API Route)
-- [ ] Buat struktur folder endpoint di `app/api/chat/route.ts`.
-- [ ] Set runtime menjadi Node.js (`export const runtime = "nodejs";`).
-- [ ] Inisialisasi instance `GoogleGenAI` menggunakan key dari *environment variables*.
-- [ ] Susun `FINANCIAL_PLANNER_PROMPT` sebagai *system instruction*.
-- [ ] Buat handler `POST` untuk menerima *payload* (`message` dan `history`).
-- [ ] Terapkan logika translasi map array history dari format *flat* ke format native Gemini (`parts: [{ text }]`).
-- [ ] Panggil `ai.models.generateContentStream` dengan parameter `model: gemini-2.5-flash` dan `temperature: 0.4`.
-- [ ] Kembalikan hasil stream ke klien. Tambahkan basic `try...catch` error handling.
+## 1. Integrasi Konteks Data Pengguna ke Chatbot AI (Priority: High)
+- [ ] **Injeksi Data Finansial ke Prompt:**
+  - Ambil data `FinancialProfile` (pemasukan, pengeluaran, tabungan), `Goal` aktif, dan `InvestmentRecommendation` / `BudgetPlan` terbaru dari server.
+  - Suntikkan data tersebut sebagai konteks awal ke `FINANCIAL_PLANNER_PROMPT` saat membuka sesi chat di `ChatDrawer`.
+- [ ] **Konsultasi Selaras Rencana:**
+  - Pastikan asisten AI dapat langsung mengomentari dan memberi saran berdasarkan alokasi instrumen atau anggaran yang telah dibuat pengguna tanpa perlu meminta data ulang.
 
-## Phase 3: Pengembangan UI Komponen (Frontend)
-- [ ] Buat komponen `components/MessageBubble.tsx`. Implementasikan variasi styling Tailwind (warna/posisi) untuk membedakan pesan `user` dan `model`. Integrasikan `react-markdown` di dalam bubble `model`.
-- [ ] Buat komponen kerangka dasar `components/ChatInterface.tsx`.
-- [ ] Bangun layout utama: Header sederhana, *scrollable message container*, dan form input interaktif di bawah layar.
-- [ ] Tambahkan tombol *Quick Prompts* di atas form input.
+---
 
-## Phase 4: Integrasi State Management & Streaming Reader
-- [ ] Definisikan state pada `ChatInterface.tsx` atau halaman utama untuk menyimpan `history` (array *flat*) dan `isGenerating` (boolean loader state).
-- [ ] Tulis fungsi `handleSubmit`: 
-  - Masukkan pesan pengguna ke state `history`.
-  - Eksekusi *fetch* ke `/api/chat`.
-- [ ] Implementasikan parser *ReadableStream*. Baca *chunks* yang masuk dan gunakan *updater* state React untuk menambahkan karakter teks secara beruntun (*typewriter effect*) ke pesan asisten yang sedang dibuat.
-- [ ] Tambahkan logika potong histori (hanya bawa 20 pesan terbaru ke server).
-- [ ] Terapkan auto-scroll *Ref* yang mengarah ke dasar komponen setiap kali chunk baru dirender.
+## 2. Pengujian Menyeluruh (Testing & Reliability) (Priority: High)
+- [ ] **Unit Testing & Property-Based Testing (PBT):**
+  - Buat suite pengujian logika murni di `lib/investment/` (`allocation.test.ts`, `projection.test.ts`, `riskScoring.test.ts`) menggunakan `vitest` dan `fast-check`.
+  - Buat pengujian untuk `lib/planner/goalBudget.test.ts` untuk memvalidasi guard input, keakuratan akumulasi murni, persentase turunan, dan evaluasi *feasibility* (`impossible`, `tight`, `ok`).
+- [ ] **Integration & Component Testing:**
+  - Pengujian alur Wizard Investasi dan Planner dari awal hingga penyimpanan hasil.
+  - Pengujian verifikasi perilaku `ProfileGate` dan *one-off override*.
 
-## Phase 5: Validasi & Testing Akhir
-- [ ] Lakukan pengetesan *Scenario 1*: Cek tanpa menyebutkan nominal. Pastikan model membalas dengan permintaan data.
-- [ ] Lakukan pengetesan *Scenario 2*: Uji persentase kalkulasi 50/30/20.
-- [ ] Verifikasi apakah teks *"Disclaimer: Simulasi ini..."* secara konsisten muncul di akhir jawaban model.
-- [ ] Pastikan UI responsif di layar perangkat seluler (Tailwind class checks).
+---
+
+## 3. Autentikasi Pengguna & Multi-User (Priority: Medium)
+- [ ] **Integrasi Auth (Supabase Auth / NextAuth):**
+  - Implementasi login/register (Email OTP / Google OAuth).
+  - Hubungkan `session.user.id` ke kolom `userId` yang sudah tersedia di semua model database (`FinancialProfile`, `Goal`, `RiskAssessment`, `InvestmentRecommendation`, `BudgetPlan`).
+- [ ] **Manajemen Sesi & Data Privat:**
+  - Isolasi data per pengguna pada seluruh query Prisma (`where: { userId }`).
+
+---
+
+## 4. Dukungan Multi-Goal (Banyak Tujuan Keuangan) (Priority: Medium)
+- [ ] **Daftar & Prioritas Tujuan:**
+  - Ubah pengelolaan tujuan tunggal (*single active goal*) menjadi multi-goal (misal: *Dana Darurat*, *Beli Rumah*, *Dana Pendidikan*, *Pensiun*).
+  - Tambahkan alokasi tabungan bulanan yang didistribusikan ke beberapa tujuan sekaligus.
+- [ ] **Manajemen Portofolio per Tujuan:**
+  - Rekomendasi alokasi investasi yang terpisah dan disesuaikan untuk masing-masing tujuan sesuai horizon waktunya.
+
+---
+
+## 5. Pelacak Arus Kas & Realisasi Transaksi (Priority: Low)
+- [ ] **Pencatatan Transaksi Harian:**
+  - Fitur catat pengeluaran harian dan pengelompokan ke pos Kebutuhan atau Keinginan.
+- [ ] **Monitoring Realisasi vs Rencana Anggaran:**
+  - Dashboard visual perbandingan antara anggaran yang direncanakan (`BudgetPlan`) dengan realisasi pengeluaran aktual bulan berjalan.
+
+---
+
+## 6. Ekspor Laporan & Visualisasi (Priority: Low)
+- [ ] **Export ke PDF / Gambar:**
+  - Opsi unduh ringkasan rencana keuangan dan alokasi portofolio investasi dalam format PDF atau gambar yang mudah disimpan/dibagikan.
+- [ ] **Grafik Interaktif:**
+  - Visualisasi grafik proyeksi pertumbuhan dana investasi dari waktu ke waktu (*growth chart*).
