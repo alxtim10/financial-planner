@@ -111,7 +111,8 @@ prisma/           # schema + migrations
 | Dokumen | Isi |
 |---|---|
 | [`dokumentasi.md`](./dokumentasi.md) | Arah produk keseluruhan (otoritatif). |
-| [`RUMUS.md`](./RUMUS.md) | Kumpulan rumus perhitungan seluruh modul (`lib/*`) + validasi API. |
+| [`CARA-HITUNG.md`](./CARA-HITUNG.md) | Penjelasan ramah-awam untuk perhitungan (dana darurat, anggaran, trade-off, investasi). |
+| [`RUMUS.md`](./RUMUS.md) | Kumpulan rumus perhitungan seluruh modul (`lib/*`) + validasi API (versi teknis). |
 | `.kiro/specs/financial-planner/` | Spesifikasi formal cakupan Investasi (requirements, design, tasks). |
 | `.kiro/specs/budget-planner/` | Spesifikasi formal cakupan Planner. |
 | `.kiro/specs/active-goal/` | Spesifikasi formal Tujuan Aktif tersentralisasi. |
