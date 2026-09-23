@@ -7,7 +7,7 @@ Aplikasi web perencanaan keuangan personal yang terstruktur (Next.js App Router)
 ## Fitur
 
 - **Profil Finansial** — gate wajib: pemasukan bulanan, pengeluaran bulanan, dan tabungan saat ini. Tanpa profil ini, cakupan Investasi & Planner terkunci.
-- **Tujuan Aktif (Active Goal)** — satu tujuan keuangan tersentralisasi (nama opsional + nominal target + jangka waktu), dikelola dari dashboard, dan dipakai bersama oleh Investasi & Planner. Tujuan aktif = baris `Goal` terbaru ("latest wins").
+- **Tujuan Aktif (Active Goal)** — satu tujuan keuangan tersentralisasi (nama opsional + nominal target + jangka waktu **dalam bulan**), dikelola dari dashboard, dan dipakai bersama oleh Investasi & Planner. Tujuan aktif = baris `Goal` terbaru ("latest wins").
 - **Cakupan Investasi** — dari tujuan + profil risiko (survei singkat) → rekomendasi alokasi berbasis aturan (matriks Horizon × Profil Risiko) + kontribusi bulanan (Future Value of Annuity). Angka bersifat deterministik, bukan hasil LLM.
 - **Cakupan Planner (goal-driven)** — masukkan pemasukan + tujuan + jangka waktu → sistem menghitung berapa yang harus ditabung tiap bulan, lalu memecah kebutuhan/keinginan; persentase adalah **output**, bukan input. Ada peringatan kelayakan (feasibility) saat target terlalu berat.
 - **Chatbot pelengkap** — konsultasi naratif berbasis Gemini (streaming) via drawer geser dari kanan, tersedia di semua halaman.
@@ -18,7 +18,7 @@ Investasi & Planner **memprefill** target/jangka waktu dari Tujuan Aktif; penggu
 
 - **Framework:** Next.js 16 (App Router), React 19, TypeScript
 - **Styling:** Tailwind CSS v4
-- **Database:** PostgreSQL + Prisma ORM (`prisma`, `@prisma/client`)
+- **Database:** Supabase (PostgreSQL ter-host) + Prisma ORM (`prisma`, `@prisma/client`)
 - **AI:** `@google/genai` (streaming, runtime Node.js)
 - **UI utilitas:** `lucide-react`, `react-markdown`, `remark-gfm`
 - **Test runner:** Vitest (logika murni `lib/*`, sebagian dengan property-based testing via `fast-check`)
@@ -26,7 +26,7 @@ Investasi & Planner **memprefill** target/jangka waktu dari Tujuan Aktif; penggu
 ## Prasyarat
 
 - Node.js 20+ dan npm
-- PostgreSQL berjalan lokal
+- Proyek Supabase (PostgreSQL ter-host) — ambil connection string dari dashboard
 - API key Google Gemini ([Google AI Studio](https://aistudio.google.com/))
 
 ## Setup
@@ -44,19 +44,30 @@ Investasi & Planner **memprefill** target/jangka waktu dari Tujuan Aktif; penggu
    ```
    - `GEMINI_API_KEY` — key dari Google AI Studio (jangan pakai prefix `NEXT_PUBLIC_`).
    - `GEMINI_MODEL` — opsional, default `gemini-flash-lite-latest` (alternatif `gemini-flash-latest`).
-   - `DATABASE_URL` — koneksi PostgreSQL, mis. `postgresql://USER@localhost:5432/financial_planner`.
+   - `DATABASE_URL` — koneksi Supabase **pooled** (PgBouncer, port `6543`, akhiri `?pgbouncer=true`); dipakai runtime aplikasi.
+   - `DIRECT_URL` — koneksi Supabase **langsung** (port `5432`); dipakai Prisma untuk migrasi.
+
+   Ambil kedua string koneksi dari Supabase Dashboard → **Project Settings → Database → Connection string**.
 
 3. **Siapkan database**
 
-   Buat database (bila belum ada), lalu jalankan migrasi Prisma:
+   Database sudah tersedia di Supabase, jadi cukup terapkan migrasi Prisma (membuat tabel):
    ```bash
-   createdb financial_planner
-   npx prisma migrate dev
+   npx prisma migrate deploy
    ```
-   Prisma CLI tidak selalu memuat `.env.local` otomatis; bila perlu, sisipkan `DATABASE_URL` inline:
+   Untuk pengembangan lokal (membuat migrasi baru saat skema berubah), gunakan `npx prisma migrate dev`.
+   Prisma CLI tidak selalu memuat `.env.local` otomatis; bila perlu, sisipkan URL inline:
    ```bash
-   DATABASE_URL="postgresql://USER@localhost:5432/financial_planner" npx prisma migrate dev
+   DATABASE_URL="<pooled-url>" DIRECT_URL="<direct-url>" npx prisma migrate deploy
    ```
+
+   > **Catatan macOS + Supabase (TLS).** Runtime aplikasi (Prisma Client) terhubung normal ke Supabase. Namun *schema/migration engine* Prisma di macOS memakai Apple Secure Transport yang tidak mendukung TLS 1.3, sedangkan pooler Supabase menegosiasikan TLS 1.3 — sehingga `prisma migrate deploy/dev` bisa gagal dengan `P1011: Error opening a TLS connection`. Bila ini terjadi, terapkan skema lewat `psql` (yang memakai OpenSSL) sebagai fallback:
+   > ```bash
+   > # generate SQL skema penuh (offline, tanpa koneksi DB)
+   > npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > schema.sql
+   > # terapkan via psql (mendukung TLS 1.3)
+   > psql "<direct-url>?sslmode=require" -f schema.sql
+   > ```
 
 ## Menjalankan
 

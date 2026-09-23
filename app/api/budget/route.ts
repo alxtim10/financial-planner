@@ -12,7 +12,7 @@ interface BudgetBody {
   monthlyIncome?: unknown;
   monthlyExpense?: unknown;
   targetAmount?: unknown;
-  horizonYears?: unknown;
+  horizonMonths?: unknown;
   userId?: string | null;
 }
 
@@ -27,10 +27,10 @@ interface BudgetBody {
  *   2. Ambil BudgetPlan terbaru (orderBy createdAt desc) → latestPlan (atau null).
  *   3. getActiveGoal() → prefill tujuan Planner:
  *      - goalTargetAmount = active.targetAmount (atau null bila belum ada tujuan).
- *      - goalHorizonYears = active.horizonYears (atau null).
+ *      - goalHorizonMonths = active.horizonMonths (atau null).
  *      - goalName = active.name (atau null).
  *   4. Sukses → 200 { defaultMonthlyIncome, currentSavings, monthlyExpense,
- *      latestPlan, goalTargetAmount, goalHorizonYears, goalName }.
+ *      latestPlan, goalTargetAmount, goalHorizonMonths, goalName }.
  *
  * Error DB → 500 (pesan ramah Bahasa Indonesia, tanpa detail internal).
  *
@@ -52,7 +52,7 @@ export async function GET() {
         monthlyExpense: profile?.expense ?? null,
         latestPlan,
         goalTargetAmount: active?.targetAmount ?? null,
-        goalHorizonYears: active?.horizonYears ?? null,
+        goalHorizonMonths: active?.horizonMonths ?? null,
         goalName: active?.name ?? null,
       },
       { status: 200 },
@@ -69,23 +69,23 @@ export async function GET() {
 /**
  * POST /api/budget — hitung + simpan rencana anggaran goal-driven.
  *
- * Body: { monthlyIncome, targetAmount, horizonYears, userId? }
+ * Body: { monthlyIncome, targetAmount, horizonMonths, userId? }
  *
  * Validasi (→ 400, pesan ramah Bahasa Indonesia):
  *   - monthlyIncome angka berhingga > 0.
  *   - targetAmount angka berhingga > 0.
- *   - horizonYears bilangan bulat > 0.
+ *   - horizonMonths bilangan bulat > 0.
  *   - JSON tidak valid → 400.
  *
  * Alur server:
  *   1. getLatestProfile() → currentSavings = profile?.currentSavings ?? 0,
  *      monthlyExpense = profile?.expense ?? 0.
  *   2. computeGoalBudget({ monthlyIncome, currentSavings, targetAmount,
- *      horizonYears, monthlyExpense }) di dalam try/catch (guard error → 400
+ *      horizonMonths, monthlyExpense }) di dalam try/catch (guard error → 400
  *      sebagai jaring pengaman).
- *   3. Persist BudgetPlan memakai ulang kolom yang ada (tanpa migrasi):
+ *   3. Persist BudgetPlan memakai ulang kolom yang ada:
  *      presetId "goal", baseAmount = monthlyIncome, savingsTargetAmount =
- *      targetAmount, savingsHorizonYears = horizonYears, breakdown =
+ *      targetAmount, savingsHorizonMonths = horizonMonths, breakdown =
  *      result.lines (Json). Kolom mode/includeSavings/investmentContribution
  *      dibiarkan null/diomit.
  *   4. Sukses → 200 GoalBudgetResult penuh.
@@ -106,7 +106,7 @@ export async function POST(req: Request) {
     monthlyIncome,
     monthlyExpense,
     targetAmount,
-    horizonYears,
+    horizonMonths,
     userId = null,
   } = body ?? {};
 
@@ -139,9 +139,9 @@ export async function POST(req: Request) {
     );
   }
 
-  if (typeof horizonYears !== "number" || !Number.isInteger(horizonYears) || horizonYears <= 0) {
+  if (typeof horizonMonths !== "number" || !Number.isInteger(horizonMonths) || horizonMonths <= 0) {
     return NextResponse.json(
-      { error: "Jangka waktu harus berupa bilangan bulat tahun yang lebih besar dari nol." },
+      { error: "Jangka waktu harus berupa bilangan bulat bulan yang lebih besar dari nol." },
       { status: 400 },
     );
   }
@@ -160,7 +160,7 @@ export async function POST(req: Request) {
       monthlyIncome,
       currentSavings,
       targetAmount,
-      horizonYears,
+      horizonMonths,
       monthlyExpense: resolvedMonthlyExpense,
     });
   } catch (err) {
@@ -182,7 +182,7 @@ export async function POST(req: Request) {
         // Kolom includeSavings/investmentContribution dibiarkan null/diomit.
         mode: "goal",
         savingsTargetAmount: targetAmount,
-        savingsHorizonYears: horizonYears,
+        savingsHorizonMonths: horizonMonths,
         breakdown: result.lines as unknown as Prisma.InputJsonValue,
       },
     });

@@ -77,8 +77,7 @@ export default async function Home() {
                   Profil finansial Anda
                 </h2>
                 <p className="text-sm text-muted">
-                  Berikut ringkasan kondisi keuangan yang tersimpan. Lanjutkan
-                  ke perencanaan investasi kapan saja.
+                  Berikut ringkasan kondisi keuangan yang tersimpan.
                 </p>
               </div>
 
@@ -120,14 +119,7 @@ export default async function Home() {
                 </div>
               </dl>
 
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Link
-                  href="/investment"
-                  className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] text-[0.9375rem] font-medium text-white transition-all duration-200 hover:brightness-110"
-                >
-                  Lanjut ke perencanaan investasi
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
+              <div className="flex">
                 <Link
                   href="/profile"
                   className="flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 text-[0.9375rem] font-medium text-foreground transition-colors hover:bg-surface-hover"
@@ -167,11 +159,29 @@ export default async function Home() {
                   id: activeGoal.id,
                   name: activeGoal.name,
                   targetAmount: activeGoal.targetAmount,
-                  horizonYears: activeGoal.horizonYears,
+                  horizonMonths: activeGoal.horizonMonths,
                 }
               : null
           }
         />
+
+        {/* ── CTA lanjut: satu alur profil → tujuan → investasi ─── */}
+        {hasProfile && (
+          <div className="mb-8 -mt-4">
+            <Link
+              href="/investment"
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] text-[0.9375rem] font-medium text-white transition-all duration-200 hover:brightness-110"
+            >
+              Lanjut ke perencanaan investasi
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <p className="mt-2 text-center text-xs text-muted">
+              {activeGoal
+                ? "Target dana dan jangka waktu tujuan aktif di atas akan otomatis dipakai."
+                : "Belum ada tujuan aktif — Anda tetap bisa mengisinya manual di halaman investasi, atau tetapkan dulu di atas."}
+            </p>
+          </div>
+        )}
 
         {/* ── Kartu navigasi ──────────────────────────────────── */}
         <section aria-label="Navigasi" className="mb-8">

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Wallet, TrendingDown, PiggyBank, Loader2, CheckCircle2 } from "lucide-react";
+import { Wallet, TrendingDown, PiggyBank, Loader2, CheckCircle2, Info } from "lucide-react";
 import { formatThousands, parseThousands } from "@/lib/format/rupiahInput";
 
 /** Field yang dikelola form beserta metadata tampilannya. */
@@ -13,6 +13,8 @@ interface FieldConfig {
   label: string;
   hint: string;
   icon: typeof Wallet;
+  /** Catatan penjelas opsional yang tampil di bawah field (mis. cakupan pengeluaran). */
+  note?: string;
 }
 
 const FIELDS: FieldConfig[] = [
@@ -27,6 +29,7 @@ const FIELDS: FieldConfig[] = [
     label: "Pengeluaran bulanan",
     hint: "Rata-rata pengeluaran rutin per bulan.",
     icon: TrendingDown,
+    note: "Sertakan juga utang/angsuran (mis. cicilan KPR, kendaraan) dan bagi rata pengeluaran yang tidak tiap bulan (mis. pajak kendaraan tahunan ÷ 12) agar estimasi lebih akurat.",
   },
   {
     key: "currentSavings",
@@ -134,7 +137,7 @@ export default function ProfileForm() {
       noValidate
       className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] sm:p-6"
     >
-      {FIELDS.map(({ key, label, hint, icon: Icon }) => {
+      {FIELDS.map(({ key, label, hint, icon: Icon, note }) => {
         const error = errors[key];
         // Pratinjau kini cukup mencerminkan nilai bergrup yang sedang diketik.
         const preview = values[key] ? `Rp ${values[key]}` : null;
@@ -181,6 +184,12 @@ export default function ProfileForm() {
               <p id={hintId} className="text-xs text-muted">
                 {preview ? preview : hint}
               </p>
+            )}
+            {note && (
+              <div className="mt-1 flex items-start gap-2 rounded-lg bg-accent-soft px-3 py-2">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                <p className="text-xs leading-relaxed text-muted">{note}</p>
+              </div>
             )}
           </div>
         );

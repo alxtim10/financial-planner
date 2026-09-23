@@ -6,15 +6,15 @@ export const runtime = "nodejs";
 interface GoalRequest {
   name?: unknown;
   targetAmount?: unknown;
-  horizonYears?: unknown;
+  horizonMonths?: unknown;
   userId?: string | null;
 }
 
 /**
  * POST /api/goal — simpan Goal.
  * Menerima `name` opsional (di-trim; string kosong → null).
- * Validasi: targetAmount finit & > 0; horizonYears finit, integer, & > 0.
- * Sukses → 201 { id, name, targetAmount, horizonYears }.
+ * Validasi: targetAmount finit & > 0; horizonMonths finit, integer, & > 0.
+ * Sukses → 201 { id, name, targetAmount, horizonMonths }.
  */
 export async function POST(req: Request) {
   let body: GoalRequest;
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Permintaan tidak valid." }, { status: 400 });
   }
 
-  const { name: rawName, targetAmount, horizonYears, userId = null } = body;
+  const { name: rawName, targetAmount, horizonMonths, userId = null } = body;
 
   // Normalisasi name: bila string → trim, string kosong → null; selain itu null.
   const name = typeof rawName === "string" && rawName.trim() !== "" ? rawName.trim() : null;
@@ -37,30 +37,30 @@ export async function POST(req: Request) {
     );
   }
 
-  // Validasi horizonYears: harus angka finit, bilangan bulat, dan lebih besar dari 0.
-  if (typeof horizonYears !== "number" || !Number.isFinite(horizonYears) || horizonYears <= 0) {
+  // Validasi horizonMonths: harus angka finit, bilangan bulat, dan lebih besar dari 0.
+  if (typeof horizonMonths !== "number" || !Number.isFinite(horizonMonths) || horizonMonths <= 0) {
     return NextResponse.json(
-      { error: "Jangka waktu (tahun) harus berupa angka lebih besar dari 0." },
+      { error: "Jangka waktu (bulan) harus berupa angka lebih besar dari 0." },
       { status: 400 },
     );
   }
-  if (!Number.isInteger(horizonYears)) {
+  if (!Number.isInteger(horizonMonths)) {
     return NextResponse.json(
-      { error: "Jangka waktu harus dalam bilangan tahun yang bulat." },
+      { error: "Jangka waktu harus dalam bilangan bulan yang bulat." },
       { status: 400 },
     );
   }
 
   try {
     const goal = await prisma.goal.create({
-      data: { name, targetAmount, horizonYears, userId: userId ?? null },
+      data: { name, targetAmount, horizonMonths, userId: userId ?? null },
     });
     return NextResponse.json(
       {
         id: goal.id,
         name: goal.name,
         targetAmount: goal.targetAmount,
-        horizonYears: goal.horizonYears,
+        horizonMonths: goal.horizonMonths,
       },
       { status: 201 },
     );

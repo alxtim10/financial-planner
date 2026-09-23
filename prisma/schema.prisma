@@ -1,10 +1,15 @@
 // Prisma schema untuk Financial Planner (Investment Scope MVP).
-// Koneksi dibaca dari env DATABASE_URL. Field `userId` nullable sebagai
-// placeholder untuk auth di masa depan (MVP tanpa auth).
+// Database: Supabase (PostgreSQL ter-host).
+//   - DATABASE_URL : koneksi pooled (PgBouncer, port 6543, ?pgbouncer=true)
+//     dipakai runtime aplikasi.
+//   - DIRECT_URL   : koneksi langsung (port 5432) dipakai Prisma untuk migrasi.
+// Field `userId` nullable sebagai placeholder untuk auth di masa depan
+// (MVP tanpa auth).
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -24,10 +29,10 @@ model FinancialProfile {
 model Goal {
   id           String   @id @default(cuid())
   userId       String?
-  name         String? // label opsional, mis. "Beli Rumah"
-  targetAmount Float
-  horizonYears Int
-  createdAt    DateTime @default(now())
+  name          String? // label opsional, mis. "Beli Rumah"
+  targetAmount  Float
+  horizonMonths Int // jangka waktu dalam bulan
+  createdAt     DateTime @default(now())
 }
 
 model RiskAssessment {
@@ -59,7 +64,7 @@ model BudgetPlan {
   manualSavingsTarget    Float? // deprecated: tidak lagi dipakai (dipertahankan agar tidak perlu migrasi destruktif)
   investmentContribution Float? // snapshot monthlyContribution (kombinasi)
   savingsTargetAmount    Float? // target tabungan opsional (proyeksi)
-  savingsHorizonYears    Int? // horizon tahun opsional (Arah B)
+  savingsHorizonMonths   Int? // horizon dalam bulan opsional
   includeSavings         Boolean? // apakah tabungan saat ini dihitung sebagai saldo awal (present value)
   breakdown              Json // BudgetLine[] hasil computeBudget
   createdAt              DateTime @default(now())

@@ -114,9 +114,9 @@ export function monthsToReachTarget(args: {
 
 /**
  * Arah B (Required_Monthly_Saving): tabungan bulanan yang diperlukan untuk
- * mencapai `targetAmount` dalam `horizonYears`, pada `annualReturn` (desimal),
+ * mencapai `targetAmount` dalam `horizonMonths`, pada `annualReturn` (desimal),
  * dengan saldo awal opsional `presentValue` (PV, default 0). Tingkat bunga
- * bulanan `i = annualReturn / 12`; jumlah periode `n = horizonYears * 12`.
+ * bulanan `i = annualReturn / 12`; jumlah periode `n = horizonMonths`.
  *
  * - Sudah tercapai (Req 13.6): bila `PV >= targetAmount` → return `0`.
  * - Tanpa pertumbuhan (`i === 0`, mencakup fallback saat `annualReturn <= 0`):
@@ -129,17 +129,17 @@ export function monthsToReachTarget(args: {
  * atas menyederhana menjadi perilaku from-zero yang lama.
  *
  * Guard (Req 11.6, 11.8, 13.9): melempar Error bila `targetAmount` bukan angka
- * berhingga `> 0`, `horizonYears` bukan bilangan bulat positif berhingga
+ * berhingga `> 0`, `horizonMonths` bukan bilangan bulat positif berhingga
  * (`Number.isInteger` dan `> 0`), `annualReturn` bukan angka berhingga `>= 0`,
  * atau `presentValue` (default 0) bukan angka berhingga `>= 0`.
  */
 export function requiredMonthlySaving(args: {
   targetAmount: number; // > 0
-  horizonYears: number; // bilangan bulat positif
+  horizonMonths: number; // bilangan bulat positif (bulan)
   annualReturn: number; // desimal >= 0 (0 → tanpa bunga)
   presentValue?: number; // Present_Value (>= 0, default 0)
 }): number {
-  const { targetAmount, horizonYears, annualReturn, presentValue = 0 } = args;
+  const { targetAmount, horizonMonths, annualReturn, presentValue = 0 } = args;
 
   if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
     throw new Error(
@@ -148,10 +148,10 @@ export function requiredMonthlySaving(args: {
       )}.`
     );
   }
-  if (!Number.isInteger(horizonYears) || horizonYears <= 0) {
+  if (!Number.isInteger(horizonMonths) || horizonMonths <= 0) {
     throw new Error(
-      `horizonYears tidak valid: harus bilangan bulat positif, diterima ${String(
-        horizonYears
+      `horizonMonths tidak valid: harus bilangan bulat positif, diterima ${String(
+        horizonMonths
       )}.`
     );
   }
@@ -178,7 +178,7 @@ export function requiredMonthlySaving(args: {
   }
 
   const i = annualReturn / 12; // tingkat bunga bulanan
-  const n = horizonYears * 12; // jumlah periode dalam bulan
+  const n = horizonMonths; // jumlah periode dalam bulan
 
   let pmt: number;
 

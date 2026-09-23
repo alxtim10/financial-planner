@@ -21,7 +21,7 @@ import type {
  * Menghitung `GoalBudgetResult` dari input goal-driven (`GoalBudgetInput`).
  *
  * Model akumulasi murni (no growth): pengguna memberi `monthlyIncome`,
- * `targetAmount`, `horizonYears`, dan profil menyuplai `currentSavings` +
+ * `targetAmount`, `horizonMonths`, dan profil menyuplai `currentSavings` +
  * `monthlyExpense`. Sistem menghitung `Ditabung` yang harus disisihkan tiap
  * bulan, lalu menurunkan persentase (`Derived_Percentage`) sebagai OUTPUT.
  *
@@ -29,7 +29,7 @@ import type {
  * - `monthlyIncome` berhingga > 0
  * - `currentSavings` berhingga >= 0
  * - `targetAmount` berhingga > 0
- * - `horizonYears` bilangan bulat (`Number.isInteger`) & > 0
+ * - `horizonMonths` bilangan bulat (`Number.isInteger`) & > 0
  * - `monthlyExpense` berhingga >= 0
  *
  * Nilai hasil disimpan presisi; pembulatan hanya di lapisan tampilan (Req
@@ -41,7 +41,7 @@ export function computeGoalBudget(input: GoalBudgetInput): GoalBudgetResult {
     monthlyIncome,
     currentSavings,
     targetAmount,
-    horizonYears,
+    horizonMonths,
     monthlyExpense,
   } = input;
 
@@ -67,10 +67,10 @@ export function computeGoalBudget(input: GoalBudgetInput): GoalBudgetResult {
       )}.`
     );
   }
-  if (!Number.isInteger(horizonYears) || horizonYears <= 0) {
+  if (!Number.isInteger(horizonMonths) || horizonMonths <= 0) {
     throw new Error(
-      `Jangka waktu (tahun) tidak valid: harus bilangan bulat positif, diterima ${String(
-        horizonYears
+      `Jangka waktu (bulan) tidak valid: harus bilangan bulat positif, diterima ${String(
+        horizonMonths
       )}.`
     );
   }
@@ -82,8 +82,8 @@ export function computeGoalBudget(input: GoalBudgetInput): GoalBudgetResult {
     );
   }
 
-  // 2. Months_N (Req 18.1).
-  const monthsN = horizonYears * 12;
+  // 2. Months_N — jangka waktu sudah dalam bulan (Req 18.1).
+  const monthsN = horizonMonths;
 
   // 3. Ditabung — akumulasi murni per bulan, tak pernah negatif (Req 18.2).
   const ditabung = Math.max(0, targetAmount - currentSavings) / monthsN;

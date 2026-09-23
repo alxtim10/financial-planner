@@ -15,7 +15,7 @@
 
 ### Alur inti MVP
 1. **Profil Finansial** (gate wajib): pengguna mengisi pemasukan bulanan, pengeluaran bulanan, dan tabungan saat ini. Tanpa profil ini, cakupan Investasi terkunci.
-2. **Tujuan (Goal):** nominal target + jangka waktu (mis. Rp 100.000.000 dalam 5 tahun). Horizon diturunkan dari jangka waktu.
+2. **Tujuan (Goal):** nominal target + jangka waktu **dalam bulan** (mis. Rp 100.000.000 dalam 60 bulan). Horizon diturunkan dari jangka waktu.
 3. **Profil Risiko:** survei singkat → skor → klasifikasi `Konservatif` / `Moderat` / `Agresif`.
 4. **Rekomendasi:** sistem menghitung alokasi berbasis aturan (matriks Horizon × Profil Risiko) + kontribusi bulanan yang diperlukan (Future Value of Annuity).
 
@@ -65,17 +65,22 @@ flowchart TD
 - **UI utilitas:** `lucide-react`, `react-markdown`, `remark-gfm`.
 
 ### Tambahan untuk arah baru
-- **Database:** PostgreSQL lokal.
+- **Database:** Supabase (PostgreSQL ter-host).
 - **ORM:** Prisma (`prisma`, `@prisma/client`), singleton client di `lib/db.ts`.
 - **Test runner:** Vitest (untuk logika murni `lib/investment/*`, TDD + property-based testing).
 
 ### Asumsi Database
+Database di-host di **Supabase**. Prisma memakai dua koneksi (pola standar Supabase):
 ```
-DATABASE_URL="postgresql://alxtim@localhost:5432/financial_planner"
+# Pooled (PgBouncer, port 6543) — runtime aplikasi
+DATABASE_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true"
+# Langsung (port 5432) — migrasi Prisma
+DIRECT_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres"
 ```
-- User `alxtim`, tanpa password.
-- Database `financial_planner` **belum ada** dan akan dibuat saat eksekusi (`createdb financial_planner` atau via `psql`), lalu Prisma `migrate` membuat tabel.
-- Bila pembuatan database gagal karena izin/koneksi, hentikan dan konfirmasi ke pemilik proyek — jangan memaksa.
+- Datasource Prisma memakai `url = env("DATABASE_URL")` (pooled) + `directUrl = env("DIRECT_URL")` (langsung untuk migrasi).
+- String koneksi diambil dari Supabase Dashboard → Project Settings → Database → Connection string; ganti `[PROJECT-REF]`, `[PASSWORD]`, `[REGION]`.
+- Skema & tabel dibuat lewat Prisma `migrate deploy` (produksi) / `migrate dev` (pengembangan) — bukan `createdb` lokal lagi.
+- Bila koneksi gagal karena kredensial/izin, hentikan dan konfirmasi ke pemilik proyek — jangan memaksa.
 
 ---
 
@@ -86,7 +91,7 @@ Empat model Prisma. Semua menyertakan `userId` **nullable** sebagai placeholder 
 | Model | Field inti | Peran |
 |---|---|---|
 | `FinancialProfile` | `income`, `expense`, `currentSavings` | Sumber kebenaran kondisi keuangan; gate wajib. |
-| `Goal` | `targetAmount`, `horizonYears` | Target + jangka waktu; sumber Horizon. |
+| `Goal` | `targetAmount`, `horizonMonths` | Target + jangka waktu (bulan); sumber Horizon. |
 | `RiskAssessment` | `answers`, `score`, `profile` | Hasil survei risiko + klasifikasi. |
 | `InvestmentRecommendation` | `riskProfile`, `composition` (Json), `annualReturn`, `monthlyContribution` | Rekomendasi akhir yang dipersistensi. |
 
@@ -108,12 +113,12 @@ Empat model Prisma. Semua menyertakan `userId` **nullable** sebagai placeholder 
 | > 5 Tahun | Moderat | 40% Saham/Indeks + 40% SBN + 20% Emas | 9,5% |
 | > 5 Tahun | Agresif | 70% Saham/Indeks + 20% SBN + 10% Emas | 11,0% |
 
-**Aturan bucket horizon:**
-- `horizonYears < 2` → bucket `<2` (**mengabaikan** profil risiko).
-- `2 ≤ horizonYears ≤ 5` → bucket `2-5`.
-- `horizonYears > 5` → bucket `>5`.
+**Aturan bucket horizon** (jangka waktu dinyatakan dalam **bulan**; ambang setara aturan tahun × 12):
+- `horizonMonths < 24` → bucket `<2` (**mengabaikan** profil risiko).
+- `24 ≤ horizonMonths ≤ 60` → bucket `2-5`.
+- `horizonMonths > 60` → bucket `>5`.
 
-Implementasi: `lib/investment/allocation.ts` → `getAllocation(horizonYears, riskProfile)`. Total persentase komposisi selalu 100%. Input tidak valid (profil di luar himpunan atau horizon non-positif) melempar error.
+Implementasi: `lib/investment/allocation.ts` → `getAllocation(horizonMonths, riskProfile)`. Total persentase komposisi selalu 100%. Input tidak valid (profil di luar himpunan atau horizon non-positif) melempar error.
 
 ### 4.2 Kontribusi Bulanan (Future Value of Annuity)
 
@@ -123,15 +128,15 @@ PMT = (FV − PV·(1+i)^n) · i / ((1+i)^n − 1)
 - `FV` = nominal target Goal.
 - `PV` = tabungan saat ini (dari Financial Profile).
 - `i` = estimasi return tahunan / 12 (bunga bulanan).
-- `n` = horizon dalam bulan (`horizonYears × 12`).
+- `n` = horizon dalam bulan (`= horizonMonths`).
 - **Fallback:** saat `i = 0`, gunakan linear `(FV − PV) / n`.
 - Hasil dibatasi minimum `0` (bila tabungan sudah cukup).
 
 Implementasi: `lib/investment/projection.ts` → `calculateMonthlyContribution(input)`.
 
-**Contoh:** Target FV = Rp 100.000.000, tabungan PV = Rp 10.000.000, horizon 5 tahun, profil Moderat 2–5 tahun (return 6,5%).
+**Contoh:** Target FV = Rp 100.000.000, tabungan PV = Rp 10.000.000, horizon 60 bulan, profil Moderat 2–5 tahun (return 6,5%).
 - `i = 0,065 / 12 ≈ 0,0054167`
-- `n = 5 × 12 = 60`
+- `n = 60` (bulan)
 - `(1+i)^n ≈ 1,3829`
 - `PV·(1+i)^n ≈ 10.000.000 × 1,3829 ≈ 13.829.000`
 - Pembilang: `(100.000.000 − 13.829.000) × 0,0054167 ≈ 466.760`
@@ -156,9 +161,9 @@ Cakupan **Planner** memiliki spesifikasi formal di `.kiro/specs/budget-planner/`
 > **Pivot arah (Iterasi Goal-Driven).** Model lama **preset/persentase-driven** (Requirements 1–16: pilih preset 50/30/20 · 70/20/10 · 80/20 · Custom, mode terpisah/kombinasi + shortfall, proyeksi target tabungan Arah A/B, present value/Include_Savings) **DISUPERSEKSI** dan tidak lagi menjadi arah aktif. Dulu pengguna memilih **persentase** dan target hanya efek samping; sekarang alurnya **dibalik**: pengguna memberi tujuan, sistem menghitung tabungan bulanan, dan **persentase menjadi OUTPUT**.
 
 Keputusan cakupan goal-driven (final):
-- **Input (semua wajib):** `monthlyIncome` (default dari `income` `FinancialProfile`, dapat ditimpa), `currentSavings` (dari `FinancialProfile`, **selalu** dihitung sebagai saldo awal — tanpa toggle), `targetAmount` (nominal target), dan `horizonYears` (jangka waktu dalam tahun, **wajib**).
+- **Input (semua wajib):** `monthlyIncome` (default dari `income` `FinancialProfile`, dapat ditimpa), `currentSavings` (dari `FinancialProfile`, **selalu** dihitung sebagai saldo awal — tanpa toggle), `targetAmount` (nominal target), dan `horizonMonths` (jangka waktu dalam bulan, **wajib**).
 - **Perhitungan (akumulasi murni, tanpa bunga/pertumbuhan):**
-  - `monthsN = horizonYears × 12`.
+  - `monthsN = horizonMonths`.
   - **`ditabung` (dihitung sistem)** `= max(0, (targetAmount − currentSavings)) ÷ monthsN`. Bila `currentSavings ≥ targetAmount` → **sudah tercapai** (`ditabung = 0`, status `alreadyReached`).
   - **`kebutuhan`** dari `expense` `FinancialProfile`; bila `expense` 0/tidak valid/tidak ada → **rasio fallback** `round(0.65 × (monthlyIncome − ditabung))`.
   - **`keinginan`** `= monthlyIncome − ditabung − kebutuhan`.
@@ -166,7 +171,7 @@ Keputusan cakupan goal-driven (final):
 - **Penilaian kelayakan (feasibility):** `impossible` bila `ditabung` saja melebihi `monthlyIncome` (peringatan terkuat); `tight` bila `ditabung + kebutuhan > monthlyIncome` atau `keinginan` sangat kecil (< 5% pemasukan) — dengan saran memperpanjang jangka waktu atau menurunkan target; `ok` bila sehat (tampilkan tiga pos tanpa peringatan).
 - **Dihapus dari alur (dibanding model lama):** 3 preset tetap, mode persentase Custom, `PresetPicker`, mode `terpisah`/`kombinasi` + shortfall, toggle `Include_Savings` (tabungan saat ini kini selalu saldo awal), dan cabang "Arah A time-to-goal" (horizon kini selalu diberikan). Persentase tidak pernah menjadi input. Catatan: komponen/modul lama tersebut **dipensiunkan tetapi masih ada di repo** (tidak dipakai alur goal-driven) — tidak dihapus fisik agar tidak perlu migrasi/pembersihan destruktif.
 - **Logika murni** di `lib/planner/goalBudget.ts` (`computeGoalBudget`) — akumulasi murni, diuji PBT (`fast-check`). Modul lama `presets.ts`/`budget.ts`/`savingsProjection.ts` dan komponen `PresetPicker.tsx` **dipensiunkan tetapi dipertahankan** di repo (tak dipakai UI/API goal-driven).
-- **Persistensi** ke `BudgetPlan` dengan **reuse kolom** yang sudah ada — **tanpa migrasi Prisma**: `presetId = "goal"` (penanda), `baseAmount = monthlyIncome`, `savingsTargetAmount = targetAmount`, `savingsHorizonYears = horizonYears`, `breakdown` = ketiga pos (Json); `mode`/`includeSavings`/`investmentContribution` null. Endpoint `GET /api/budget` mengembalikan `defaultMonthlyIncome` + `currentSavings` + `monthlyExpense`; `POST /api/budget` menerima `{ monthlyIncome, targetAmount, horizonYears, userId? }`.
+- **Persistensi** ke `BudgetPlan` dengan **reuse kolom** yang sudah ada — **tanpa migrasi Prisma**: `presetId = "goal"` (penanda), `baseAmount = monthlyIncome`, `savingsTargetAmount = targetAmount`, `savingsHorizonMonths = horizonMonths`, `breakdown` = ketiga pos (Json); `mode`/`includeSavings`/`investmentContribution` null. Endpoint `GET /api/budget` mengembalikan `defaultMonthlyIncome` + `currentSavings` + `monthlyExpense`; `POST /api/budget` menerima `{ monthlyIncome, targetAmount, horizonYears, userId? }`.
 - **Reuse pola yang ada:** `Profile_Gate` (gate wajib), Prisma singleton (`lib/db.ts`), helper input Rupiah (`lib/format/rupiahInput.ts`), pola visual `RecommendationCard`, token warna Miami blue, format Rupiah `Rp ${Math.round(v).toLocaleString("id-ID")}`, dan disclaimer edukatif. UI disederhanakan menjadi form (Tujuan & Pendapatan) → hasil.
 
 **Kontrak data yang dikonsumsi:** `income`, `expense`, dan `currentSavings` dari `FinancialProfile` terbaru menjadi masukan `computeGoalBudget` (income sebagai default `monthlyIncome`; expense sebagai `kebutuhan`; currentSavings sebagai saldo awal).
@@ -178,12 +183,13 @@ Cakupan **Active Goal** memiliki spesifikasi formal di `.kiro/specs/active-goal/
 
 Keputusan cakupan (final):
 - **Satu Tujuan Aktif (bukan multi-goal).** `Active_Goal` = baris `Goal` **terbaru** (`createdAt` desc) — pola "latest wins" yang sama dengan `getLatestProfile()`.
-- **Dikelola dari dashboard.** `app/page.tsx` menampilkan kartu **"Tujuan aktif"** (`components/goal/ActiveGoalCard.tsx`) berisi nama (opsional) + `targetAmount` (Rupiah) + `horizonYears`, dengan aksi **Ubah tujuan**; bila belum ada → CTA **Tetapkan tujuan**. Editor (`components/goal/GoalEditor.tsx`) mem-`POST /api/goal`. Dashboard adalah **satu-satunya tempat `Goal` dibuat**.
+- **Dikelola dari dashboard.** `app/page.tsx` menampilkan kartu **"Tujuan aktif"** (`components/goal/ActiveGoalCard.tsx`) berisi nama (opsional) + `targetAmount` (Rupiah) + `horizonMonths`, dengan aksi **Ubah tujuan**; bila belum ada → CTA **Tetapkan tujuan**. Editor (`components/goal/GoalEditor.tsx`) mem-`POST /api/goal`. Dashboard adalah **satu-satunya tempat `Goal` dibuat**.
 - **Migrasi aditif `name`.** Model `Goal` diperluas dengan `name String?` (nullable) lewat migrasi tambahan `add_goal_name` — **tanpa reset**. Baris lama memperoleh `name = null` (tampilan memakai label fallback, mis. "Tujuan").
-- **Prefill + override satu kali (one-off).** Investasi dan Planner **memprefill** `targetAmount` + `horizonYears` dari Tujuan Aktif; pengguna boleh **menimpa** nilai di dalam cakupan sebagai **skenario satu kali** yang **tidak** mengubah Tujuan Aktif yang tersimpan.
-- **Investasi tidak lagi membuat `Goal`.** `GoalForm` cakupan Investasi **berhenti** mem-`POST /api/goal`; alur hanya membaca Tujuan Aktif untuk prefill lalu meneruskan `targetAmount`/`horizonYears` efektif (prefilled/di-override) + `goalId` opsional langsung ke `POST /api/recommendation` **tanpa** mempersistensi `Goal` baru.
-- **Planner memprefill via `GET /api/budget`.** `GET /api/budget` diperluas mengembalikan `goalTargetAmount`/`goalHorizonYears`/`goalName` dari Tujuan Aktif untuk memprefill `BudgetForm`. `POST /api/budget` tidak berubah; Planner tetap menyimpan ke `BudgetPlan` (bukan `Goal`); override tetap satu kali.
-- **Kontrak API:** `POST /api/goal` menerima `name` opsional (di-trim; kosong → null) dan mempertahankan validasi lama (`targetAmount` > 0; `horizonYears` bilangan bulat > 0), mengembalikan `name` pada respons. `GET /api/goal` mengembalikan tujuan terbaru termasuk `name`. Pembaca server-side baru `getActiveGoal()` di `lib/goal.ts` (pola `getLatestProfile()`) dipakai dashboard.
+- **Satuan jangka waktu = BULAN.** Sejak migrasi `horizon_years_to_months`, kolom `Goal.horizonYears`→`Goal.horizonMonths` dan `BudgetPlan.savingsHorizonYears`→`BudgetPlan.savingsHorizonMonths` (data lama dikonversi ×12). Seluruh input, penyimpanan, perhitungan, dan tampilan kini memakai **bulan**; ambang bucket alokasi menjadi `<24` / `24..60` / `>60` bulan (setara `<2` / `2–5` / `>5` tahun).
+- **Prefill + override satu kali (one-off).** Investasi dan Planner **memprefill** `targetAmount` + `horizonMonths` dari Tujuan Aktif; pengguna boleh **menimpa** nilai di dalam cakupan sebagai **skenario satu kali** yang **tidak** mengubah Tujuan Aktif yang tersimpan.
+- **Investasi tidak lagi membuat `Goal`.** `GoalForm` cakupan Investasi **berhenti** mem-`POST /api/goal`; alur hanya membaca Tujuan Aktif untuk prefill lalu meneruskan `targetAmount`/`horizonMonths` efektif (prefilled/di-override) + `goalId` opsional langsung ke `POST /api/recommendation` **tanpa** mempersistensi `Goal` baru.
+- **Planner memprefill via `GET /api/budget`.** `GET /api/budget` diperluas mengembalikan `goalTargetAmount`/`goalHorizonMonths`/`goalName` dari Tujuan Aktif untuk memprefill `BudgetForm`. `POST /api/budget` tidak berubah; Planner tetap menyimpan ke `BudgetPlan` (bukan `Goal`); override tetap satu kali.
+- **Kontrak API:** `POST /api/goal` menerima `name` opsional (di-trim; kosong → null) dan mempertahankan validasi lama (`targetAmount` > 0; `horizonMonths` bilangan bulat > 0), mengembalikan `name` pada respons. `GET /api/goal` mengembalikan tujuan terbaru termasuk `name`. Pembaca server-side baru `getActiveGoal()` di `lib/goal.ts` (pola `getLatestProfile()`) dipakai dashboard.
 - **Sifat fitur:** integrasi/persistensi — divalidasi via integration/component test, **bukan** property-based test.
 - **Reuse pola yang ada:** model `Goal`, endpoint `/api/goal`, Prisma singleton (`lib/db.ts`), helper input Rupiah (`lib/format/rupiahInput.ts`), token Miami blue, format Rupiah `Rp ${Math.round(v).toLocaleString("id-ID")}`, `Profile_Gate`, dan disclaimer edukatif.
 

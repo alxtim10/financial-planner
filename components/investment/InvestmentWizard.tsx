@@ -22,14 +22,14 @@ interface ActiveGoal {
   id: string;
   name: string | null;
   targetAmount: number;
-  horizonYears: number;
+  horizonMonths: number;
 }
 
 /**
  * InvestmentWizard — orkestrator client alur Investasi (Req 6.1, 6.2, 6.3, 7.x).
  *
  * Merangkai GoalForm → RiskSurvey → RecommendationCard sebagai stepper:
- *  1. GoalForm: kumpulkan targetAmount, horizonYears — terprefill dari
+ *  1. GoalForm: kumpulkan targetAmount, horizonMonths — terprefill dari
  *     Active_Goal (GET /api/goal saat mount); pengguna boleh menimpa (one-off).
  *  2. RiskSurvey: kumpulkan riskAnswers (number[] panjang 5).
  *  3. Ambil currentSavings via GET /api/profile, lalu POST /api/recommendation
@@ -45,6 +45,10 @@ export default function InvestmentWizard() {
   const [step, setStep] = useState<Step>(1);
   // Active_Goal dari GET /api/goal (sumber goalId + nilai prefill).
   const [activeGoal, setActiveGoal] = useState<ActiveGoal | null>(null);
+  // Status pemuatan Active_Goal. GoalForm baru dirender setelah fetch selesai
+  // agar nilai prefill `initial` benar sejak render pertama (state useState di
+  // GoalForm hanya membaca `initial` saat mount).
+  const [goalLoading, setGoalLoading] = useState(true);
   // Nilai target/horizon efektif (bisa hasil override di GoalForm).
   const [goal, setGoal] = useState<GoalValues | null>(null);
   const [loading, setLoading] = useState(false);
@@ -66,20 +70,22 @@ export default function InvestmentWizard() {
             g &&
             typeof g.targetAmount === "number" &&
             Number.isFinite(g.targetAmount) &&
-            typeof g.horizonYears === "number" &&
-            Number.isFinite(g.horizonYears)
+            typeof g.horizonMonths === "number" &&
+            Number.isFinite(g.horizonMonths)
           ) {
             setActiveGoal({
               id: g.id,
               name: typeof g.name === "string" ? g.name : null,
               targetAmount: g.targetAmount,
-              horizonYears: g.horizonYears,
+              horizonMonths: g.horizonMonths,
             });
           }
         }
         // Gagal/null → biarkan activeGoal null; form kosong, input manual.
       } catch {
         /* offline / gangguan jaringan — biarkan form terisi manual */
+      } finally {
+        if (active) setGoalLoading(false);
       }
     })();
     return () => {
@@ -128,7 +134,7 @@ export default function InvestmentWizard() {
           goalId: activeGoal?.id ?? undefined,
           // target/horizon efektif dari form (mungkin hasil override satu kali).
           targetAmount: goal.targetAmount,
-          horizonYears: goal.horizonYears,
+          horizonMonths: goal.horizonMonths,
           riskAnswers,
           currentSavings,
         }),
@@ -206,22 +212,31 @@ export default function InvestmentWizard() {
       </ol>
 
       {/* Konten per langkah */}
-      {step === 1 && (
-        <GoalForm
-          initial={(() => {
-            // Prefill: nilai efektif (override sebelumnya) diprioritaskan, lalu
-            // Active_Goal. GoalForm memformat target dengan pemisah ribuan.
-            const source = goal ?? activeGoal;
-            return source
-              ? {
-                  targetAmount: String(source.targetAmount),
-                  horizonYears: String(source.horizonYears),
-                }
-              : undefined;
-          })()}
-          onSubmitted={handleGoalSubmitted}
-        />
-      )}
+      {step === 1 &&
+        (goalLoading ? (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-surface px-5 py-12 text-center">
+            <Loader2 className="h-6 w-6 animate-spin text-[var(--accent)]" />
+            <p className="text-sm text-muted">Memuat tujuan aktif Anda...</p>
+          </div>
+        ) : (
+          <GoalForm
+            // Setelah goalLoading selesai, `initial` dipastikan final (Active_Goal
+            // sudah termuat atau null), sehingga prefill benar pada mount GoalForm.
+            initial={(() => {
+              // Prefill: nilai efektif (override sebelumnya) diprioritaskan, lalu
+              // Active_Goal. GoalForm memformat target dengan pemisah ribuan.
+              const source = goal ?? activeGoal;
+              return source
+                ? {
+                    targetAmount: String(source.targetAmount),
+                    horizonMonths: String(source.horizonMonths),
+                  }
+                : undefined;
+            })()}
+            activeGoalName={activeGoal?.name ?? null}
+            onSubmitted={handleGoalSubmitted}
+          />
+        ))}
 
       {step === 2 && (
         <RiskSurvey onComplete={handleSurveyComplete} onBack={() => setStep(1)} />

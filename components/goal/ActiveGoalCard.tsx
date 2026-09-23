@@ -10,7 +10,7 @@ interface ActiveGoalView {
   id: string;
   name: string | null;
   targetAmount: number;
-  horizonYears: number;
+  horizonMonths: number;
 }
 
 interface ActiveGoalCardProps {
@@ -24,10 +24,24 @@ function formatRupiah(value: number): string {
 }
 
 /**
+ * Format jangka waktu bulan menjadi label ramah, mis.:
+ * 60 → "60 bulan (5 tahun)", 18 → "18 bulan (1 tahun 6 bulan)", 8 → "8 bulan".
+ */
+function formatMonths(months: number): string {
+  const m = Math.round(months);
+  if (m < 12) return `${m} bulan`;
+  const years = Math.floor(m / 12);
+  const rem = m % 12;
+  const yearPart = `${years} tahun`;
+  const detail = rem === 0 ? yearPart : `${yearPart} ${rem} bulan`;
+  return `${m} bulan (${detail})`;
+}
+
+/**
  * ActiveGoalCard — kartu Tujuan Aktif di dashboard (Req 4).
  *
  * Bila `activeGoal` ada: menampilkan nama (fallback "Tujuan" saat null/kosong),
- * target dana (Rupiah), dan jangka waktu (mis. "5 tahun"), plus tombol
+ * target dana (Rupiah), dan jangka waktu (mis. "60 bulan"), plus tombol
  * "Ubah tujuan" yang membuka `GoalEditor` inline terprefill dari tujuan saat ini.
  * Bila `activeGoal` null: menampilkan CTA "Tetapkan tujuan" yang membuka
  * `GoalEditor` dalam mode set-baru (tanpa nilai awal).
@@ -108,7 +122,7 @@ export default function ActiveGoalCard({ activeGoal }: ActiveGoalCardProps) {
               <div className="min-w-0">
                 <dt className="text-xs text-muted">Jangka waktu</dt>
                 <dd className="truncate text-sm font-medium text-foreground">
-                  {activeGoal.horizonYears} tahun
+                  {formatMonths(activeGoal.horizonMonths)}
                 </dd>
               </div>
             </div>
@@ -118,7 +132,7 @@ export default function ActiveGoalCard({ activeGoal }: ActiveGoalCardProps) {
             <GoalEditor
               initialName={activeGoal.name}
               initialTargetAmount={activeGoal.targetAmount}
-              initialHorizonYears={activeGoal.horizonYears}
+              initialHorizonMonths={activeGoal.horizonMonths}
               onSaved={handleSaved}
               onCancel={handleCancel}
             />

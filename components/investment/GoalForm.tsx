@@ -1,23 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { Target, CalendarClock, ArrowRight } from "lucide-react";
+import { Target, CalendarClock, ArrowRight, Sparkles } from "lucide-react";
 import { formatThousands, parseThousands } from "@/lib/format/rupiahInput";
 
 /** Nilai Goal yang diserahkan ke parent setelah validasi klien. */
 export interface GoalValues {
   targetAmount: number;
-  horizonYears: number;
+  horizonMonths: number;
 }
 
 interface GoalFormProps {
   /** Nilai awal (mis. prefill dari Active_Goal atau saat kembali ke langkah ini). */
-  initial?: { targetAmount: string; horizonYears: string };
+  initial?: { targetAmount: string; horizonMonths: string };
+  /** Nama Active_Goal (bila ada) — dipakai untuk banner "terisi dari tujuan aktif". */
+  activeGoalName?: string | null;
   /** Dipanggil setelah validasi klien lolos; parent (wizard) menyuplai goalId dari Active_Goal. */
   onSubmitted: (values: GoalValues) => void;
 }
 
-type FieldKey = "targetAmount" | "horizonYears";
+type FieldKey = "targetAmount" | "horizonMonths";
 type FieldErrors = Partial<Record<FieldKey, string>>;
 
 /**
@@ -33,7 +35,7 @@ function validateTarget(value: string): string | undefined {
 }
 
 /**
- * Validasi horizonYears: wajib, bilangan bulat positif (Req 2.4).
+ * Validasi horizonMonths: wajib, bilangan bulat positif (Req 2.4).
  */
 function validateHorizon(value: string): string | undefined {
   const trimmed = value.trim();
@@ -41,36 +43,39 @@ function validateHorizon(value: string): string | undefined {
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return "Harus berupa angka.";
   if (n <= 0) return "Harus lebih besar dari 0.";
-  if (!Number.isInteger(n)) return "Harus dalam tahun bulat (mis. 5).";
+  if (!Number.isInteger(n)) return "Harus dalam bulan bulat (mis. 60).";
   return undefined;
 }
 
 /**
  * GoalForm — langkah pertama alur Investasi (Req 6.1, 7.1, 7.3).
  *
- * Mengumpulkan `targetAmount` (Rupiah) dan `horizonYears` (tahun, bilangan
+ * Mengumpulkan `targetAmount` (Rupiah) dan `horizonMonths` (bulan, bilangan
  * bulat) — terprefill dari `Active_Goal` lewat prop `initial` — memvalidasi di
  * sisi klien, lalu menyerahkan nilai ke parent lewat `onSubmitted`. Form ini
  * TIDAK membuat baris `Goal` (tidak POST /api/goal); dashboard-lah pembuat
  * `Goal`, dan wizard menyuplai `goalId` dari `Active_Goal` secara terpisah.
  */
-export default function GoalForm({ initial, onSubmitted }: GoalFormProps) {
+export default function GoalForm({ initial, activeGoalName, onSubmitted }: GoalFormProps) {
   // Nilai awal langsung dibuat bergrup ribuan agar tampil rapi saat prefill.
   const [targetAmount, setTargetAmount] = useState(
     formatThousands(initial?.targetAmount ?? "")
   );
-  const [horizonYears, setHorizonYears] = useState(initial?.horizonYears ?? "");
+  const [horizonMonths, setHorizonMonths] = useState(initial?.horizonMonths ?? "");
   const [errors, setErrors] = useState<FieldErrors>({});
+
+  // Apakah form terisi awal dari Active_Goal (bukan form kosong).
+  const prefilledFromGoal = Boolean(initial?.targetAmount);
 
   function validateAll(): boolean {
     const next: FieldErrors = {
       targetAmount: validateTarget(targetAmount),
-      horizonYears: validateHorizon(horizonYears),
+      horizonMonths: validateHorizon(horizonMonths),
     };
     // Buang key undefined agar hitungan error akurat.
     const cleaned: FieldErrors = {};
     if (next.targetAmount) cleaned.targetAmount = next.targetAmount;
-    if (next.horizonYears) cleaned.horizonYears = next.horizonYears;
+    if (next.horizonMonths) cleaned.horizonMonths = next.horizonMonths;
     setErrors(cleaned);
     return Object.keys(cleaned).length === 0;
   }
@@ -80,9 +85,9 @@ export default function GoalForm({ initial, onSubmitted }: GoalFormProps) {
     if (!validateAll()) return;
 
     const target = parseThousands(targetAmount) ?? 0;
-    const horizon = Number(horizonYears);
+    const horizon = Number(horizonMonths);
 
-    onSubmitted({ targetAmount: target, horizonYears: horizon });
+    onSubmitted({ targetAmount: target, horizonMonths: horizon });
   }
 
   // Pratinjau mencerminkan nilai bergrup yang sedang diketik.
@@ -94,6 +99,26 @@ export default function GoalForm({ initial, onSubmitted }: GoalFormProps) {
       noValidate
       className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] sm:p-6"
     >
+      {/* Banner prefill dari Tujuan Aktif (Req: target/horizon terisi otomatis) */}
+      {prefilledFromGoal && (
+        <div className="flex items-start gap-2.5 rounded-xl bg-accent-soft px-3.5 py-3">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
+          <p className="text-xs leading-relaxed text-muted">
+            Terisi otomatis dari tujuan aktif
+            {activeGoalName && activeGoalName.trim() !== "" ? (
+              <>
+                {" "}
+                <span className="font-medium text-foreground">
+                  &ldquo;{activeGoalName.trim()}&rdquo;
+                </span>
+              </>
+            ) : null}
+            . Anda bisa menyesuaikannya di sini untuk skenario ini — perubahan
+            di sini tidak mengubah tujuan aktif Anda.
+          </p>
+        </div>
+      )}
+
       {/* Target dana */}
       <div className="flex flex-col gap-1.5">
         <label htmlFor="targetAmount" className="text-sm font-medium text-foreground">
@@ -140,12 +165,12 @@ export default function GoalForm({ initial, onSubmitted }: GoalFormProps) {
 
       {/* Jangka waktu */}
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="horizonYears" className="text-sm font-medium text-foreground">
-          Jangka waktu
+        <label htmlFor="horizonMonths" className="text-sm font-medium text-foreground">
+          Jangka waktu <span className="font-normal text-muted">(bulan)</span>
         </label>
         <div
           className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(0,180,216,0.12)] ${
-            errors.horizonYears
+            errors.horizonMonths
               ? "border-red-400"
               : "border-border focus-within:border-[var(--accent)]/50"
           }`}
@@ -154,31 +179,31 @@ export default function GoalForm({ initial, onSubmitted }: GoalFormProps) {
             <CalendarClock className="h-4 w-4" />
           </span>
           <input
-            id="horizonYears"
-            name="horizonYears"
+            id="horizonMonths"
+            name="horizonMonths"
             type="number"
             inputMode="numeric"
             min={1}
             step={1}
-            value={horizonYears}
+            value={horizonMonths}
             onChange={(e) => {
-              setHorizonYears(e.target.value);
-              if (errors.horizonYears) setErrors((p) => ({ ...p, horizonYears: undefined }));
+              setHorizonMonths(e.target.value);
+              if (errors.horizonMonths) setErrors((p) => ({ ...p, horizonMonths: undefined }));
             }}
-            placeholder="5"
-            aria-invalid={errors.horizonYears ? true : undefined}
-            aria-describedby={errors.horizonYears ? "horizonYears-error" : "horizonYears-hint"}
+            placeholder="60"
+            aria-invalid={errors.horizonMonths ? true : undefined}
+            aria-describedby={errors.horizonMonths ? "horizonMonths-error" : "horizonMonths-hint"}
             className="min-w-0 flex-1 bg-transparent text-[0.9375rem] text-foreground placeholder:text-muted focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
-          <span className="shrink-0 text-sm text-muted">tahun</span>
+          <span className="shrink-0 text-sm text-muted">bulan</span>
         </div>
-        {errors.horizonYears ? (
-          <p id="horizonYears-error" className="text-xs text-red-500">
-            {errors.horizonYears}
+        {errors.horizonMonths ? (
+          <p id="horizonMonths-error" className="text-xs text-red-500">
+            {errors.horizonMonths}
           </p>
         ) : (
-          <p id="horizonYears-hint" className="text-xs text-muted">
-            Berapa lama Anda ingin mencapai target ini.
+          <p id="horizonMonths-hint" className="text-xs text-muted">
+            Berapa lama Anda ingin mencapai target ini (dalam bulan).
           </p>
         )}
       </div>

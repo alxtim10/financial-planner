@@ -61,7 +61,7 @@ export interface MonthsToReachResult {
 export interface SavingsProjection {
   direction: SavingsProjectionDirection;
   targetAmount: number; // Savings_Target_Amount (Rupiah)
-  horizonYears: number | null; // Savings_Horizon (null pada Arah A)
+  horizonMonths: number | null; // Savings_Horizon dalam bulan (null pada Arah A)
   monthlySavingRate: number; // Monthly_Saving_Rate = savingsBucketAmount(breakdown)
   annualReturn: number; // Growth_Rate dipakai (0 pada terpisah / fallback)
   // TAMBAHAN (Req 13, 14) — konteks present value:
@@ -89,7 +89,7 @@ export interface GoalBudgetInput {
   monthlyIncome: number; // > 0, berhingga
   currentSavings: number; // >= 0, berhingga (saldo awal, selalu dihitung)
   targetAmount: number; // > 0, berhingga
-  horizonYears: number; // bilangan bulat positif
+  horizonMonths: number; // bilangan bulat positif (jangka waktu dalam bulan)
   monthlyExpense: number; // >= 0, berhingga (0 → fallback rasio)
 }
 
@@ -103,7 +103,7 @@ export interface GoalFeasibility {
 
 export interface GoalBudgetResult {
   monthlyIncome: number; // echo input (dasar Derived_Percentage)
-  monthsN: number; // horizonYears * 12
+  monthsN: number; // = horizonMonths (jumlah bulan)
   ditabung: number; // akumulasi murni per bulan (tak pernah negatif)
   kebutuhan: number; // dari monthlyExpense atau fallback rasio
   keinginan: number; // monthlyIncome - ditabung - kebutuhan

@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 interface RecommendationBody {
   goalId?: unknown;
   targetAmount?: unknown;
-  horizonYears?: unknown;
+  horizonMonths?: unknown;
   riskAnswers?: unknown;
   currentSavings?: unknown;
   userId?: string | null;
@@ -20,11 +20,11 @@ interface RecommendationBody {
  * POST /api/recommendation — gabungkan mesin investasi lalu simpan hasil.
  *
  * Alur:
- *   1. Validasi input (targetAmount > 0, horizonYears > 0 integer,
+ *   1. Validasi input (targetAmount > 0, horizonMonths > 0 integer,
  *      currentSavings >= 0, riskAnswers array angka non-kosong). Invalid → 400.
  *   2. scoreRisk(riskAnswers) → { score, profile }
- *   3. getAllocation(horizonYears, profile) → { composition, annualReturn }
- *   4. calculateMonthlyContribution({ futureValue, presentValue, annualReturn, horizonYears })
+ *   3. getAllocation(horizonMonths, profile) → { composition, annualReturn }
+ *   4. calculateMonthlyContribution({ futureValue, presentValue, annualReturn, horizonMonths })
  *   5. Persist RiskAssessment + InvestmentRecommendation.
  *   6. Sukses → 200 { riskProfile, composition, annualReturn, monthlyContribution }.
  *
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Permintaan tidak valid." }, { status: 400 });
   }
 
-  const { goalId, targetAmount, horizonYears, riskAnswers, currentSavings, userId = null } =
+  const { goalId, targetAmount, horizonMonths, riskAnswers, currentSavings, userId = null } =
     body ?? {};
 
   // 1. Validasi input.
@@ -52,13 +52,13 @@ export async function POST(req: Request) {
   }
 
   if (
-    typeof horizonYears !== "number" ||
-    !Number.isFinite(horizonYears) ||
-    horizonYears <= 0 ||
-    !Number.isInteger(horizonYears)
+    typeof horizonMonths !== "number" ||
+    !Number.isFinite(horizonMonths) ||
+    horizonMonths <= 0 ||
+    !Number.isInteger(horizonMonths)
   ) {
     return NextResponse.json(
-      { error: "Jangka waktu (tahun) harus berupa bilangan bulat lebih besar dari 0." },
+      { error: "Jangka waktu (bulan) harus berupa bilangan bulat lebih besar dari 0." },
       { status: 400 },
     );
   }
@@ -95,7 +95,7 @@ export async function POST(req: Request) {
     score = risk.score;
     profile = risk.profile;
 
-    const allocation = getAllocation(horizonYears, risk.profile);
+    const allocation = getAllocation(horizonMonths, risk.profile);
     composition = allocation.composition;
     annualReturn = allocation.annualReturn;
 
@@ -103,7 +103,7 @@ export async function POST(req: Request) {
       futureValue: targetAmount,
       presentValue: currentSavings,
       annualReturn: allocation.annualReturn,
-      horizonYears,
+      horizonMonths,
     });
   } catch (err) {
     console.error("[recommendation] input mesin investasi tidak valid:", err);

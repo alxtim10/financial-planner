@@ -45,7 +45,7 @@ export default function PlannerWizard() {
   const [defaultTargetAmount, setDefaultTargetAmount] = useState<number | null>(
     null
   );
-  const [defaultHorizonYears, setDefaultHorizonYears] = useState<number | null>(
+  const [defaultHorizonMonths, setDefaultHorizonMonths] = useState<number | null>(
     null
   );
 
@@ -79,9 +79,9 @@ export default function PlannerWizard() {
           if (typeof goalTarget === "number" && Number.isFinite(goalTarget)) {
             setDefaultTargetAmount(goalTarget);
           }
-          const goalHorizon = data?.goalHorizonYears;
+          const goalHorizon = data?.goalHorizonMonths;
           if (typeof goalHorizon === "number" && Number.isFinite(goalHorizon)) {
-            setDefaultHorizonYears(goalHorizon);
+            setDefaultHorizonMonths(goalHorizon);
           }
         }
         // Bila gagal memuat konteks, form tetap dapat diisi manual — bukan
@@ -111,7 +111,7 @@ export default function PlannerWizard() {
           monthlyIncome: values.monthlyIncome,
           monthlyExpense: values.monthlyExpense,
           targetAmount: values.targetAmount,
-          horizonYears: values.horizonYears,
+          horizonMonths: values.horizonMonths,
         }),
       });
 
@@ -194,7 +194,7 @@ export default function PlannerWizard() {
                 defaultMonthlyExpense={defaultMonthlyExpense}
                 currentSavings={currentSavings}
                 defaultTargetAmount={defaultTargetAmount}
-                defaultHorizonYears={defaultHorizonYears}
+                defaultHorizonMonths={defaultHorizonMonths}
                 onSubmit={handleFormSubmit}
                 submitting={submitting}
               />

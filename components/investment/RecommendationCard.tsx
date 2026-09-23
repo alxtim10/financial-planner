@@ -1,7 +1,64 @@
 "use client";
 
+import { useState } from "react";
 import { Info, TrendingUp, CalendarClock, PieChart, RotateCcw } from "lucide-react";
 import type { AllocationSlice, RiskProfile } from "@/types/finance";
+
+/**
+ * Penjelasan ringkas instrumen investasi untuk pengguna awam.
+ * Pencocokan berbasis kata kunci agar label gabungan (mis. "SBN/Deposito",
+ * "Emas/SBN Ritel", "Saham/Indeks") tetap menemukan penjelasan yang relevan.
+ */
+const INSTRUMENT_INFO: { keyword: string; label: string; desc: string }[] = [
+  {
+    keyword: "RDPU",
+    label: "RDPU (Reksa Dana Pasar Uang)",
+    desc: "Reksa dana berisi deposito dan surat utang jangka pendek. Risiko paling rendah dan mudah dicairkan, cocok untuk tujuan dekat. Imbal hasilnya kecil tapi relatif stabil.",
+  },
+  {
+    keyword: "Deposito",
+    label: "Deposito",
+    desc: "Simpanan di bank dengan bunga tetap dan jangka waktu tertentu. Aman dan dijamin LPS (sampai batas tertentu), tapi dana terkunci sampai jatuh tempo.",
+  },
+  {
+    keyword: "SBN Ritel",
+    label: "SBN Ritel (Surat Berharga Negara Ritel)",
+    desc: "Surat utang yang diterbitkan pemerintah untuk investor individu (mis. ORI, SBR, Sukuk Ritel). Relatif aman karena dijamin negara, dengan imbal hasil tetap.",
+  },
+  {
+    keyword: "RDPT",
+    label: "RDPT / Reksa Dana Pendapatan Tetap",
+    desc: "Reksa dana yang mayoritas isinya surat utang (obligasi). Risiko dan imbal hasilnya menengah — lebih tinggi dari pasar uang, lebih stabil dari saham.",
+  },
+  {
+    keyword: "SBN",
+    label: "SBN (Surat Berharga Negara)",
+    desc: "Surat utang yang diterbitkan pemerintah. Tergolong aman karena dijamin negara, memberi imbal hasil tetap, cocok untuk menyeimbangkan portofolio.",
+  },
+  {
+    keyword: "Emas",
+    label: "Emas",
+    desc: "Aset lindung nilai yang cenderung menjaga daya beli saat inflasi. Harga bisa naik-turun jangka pendek, tapi sering dipakai sebagai penyeimbang jangka panjang.",
+  },
+  {
+    keyword: "Indeks",
+    label: "Reksa Dana Indeks / Saham",
+    desc: "Mengikuti kinerja sekumpulan saham (mis. indeks IDX30/LQ45). Berpotensi imbal hasil tinggi untuk jangka panjang, tapi nilainya bisa berfluktuasi cukup besar.",
+  },
+  {
+    keyword: "Saham",
+    label: "Saham",
+    desc: "Kepemilikan sebagian atas perusahaan. Potensi pertumbuhan paling tinggi untuk jangka panjang, tapi juga paling fluktuatif — cocok bila jangka waktu Anda panjang.",
+  },
+];
+
+/** Cari penjelasan instrumen berdasarkan kata kunci pertama yang cocok. */
+function findInstrumentInfo(instrument: string): { label: string; desc: string } | null {
+  const match = INSTRUMENT_INFO.find((info) =>
+    instrument.toLowerCase().includes(info.keyword.toLowerCase()),
+  );
+  return match ? { label: match.label, desc: match.desc } : null;
+}
 
 /** Payload rekomendasi dari POST /api/recommendation. */
 export interface InvestmentRecommendation {
@@ -51,6 +108,8 @@ export default function RecommendationCard({
   onRestart,
 }: RecommendationCardProps) {
   const { riskProfile, composition, annualReturn, monthlyContribution } = recommendation;
+  // Instrumen mana yang penjelasannya sedang dibuka (null = tidak ada).
+  const [openInfo, setOpenInfo] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col gap-5">
@@ -108,24 +167,60 @@ export default function RecommendationCard({
 
           {/* Rincian per instrumen */}
           <ul className="flex flex-col gap-2.5">
-            {composition.map((slice, i) => (
-              <li
-                key={slice.instrument}
-                className="flex items-center justify-between gap-3 text-sm"
-              >
-                <span className="flex min-w-0 items-center gap-2 text-foreground">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }}
-                  />
-                  <span className="truncate">{slice.instrument}</span>
-                </span>
-                <span className="shrink-0 font-medium tabular-nums text-foreground">
-                  {slice.percentage}%
-                </span>
-              </li>
-            ))}
+            {composition.map((slice, i) => {
+              const info = findInstrumentInfo(slice.instrument);
+              const isOpen = openInfo === slice.instrument;
+              return (
+                <li key={slice.instrument} className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="flex min-w-0 items-center gap-2 text-foreground">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }}
+                      />
+                      <span className="truncate">{slice.instrument}</span>
+                      {info && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpenInfo(isOpen ? null : slice.instrument)
+                          }
+                          aria-expanded={isOpen}
+                          aria-label={`Apa itu ${slice.instrument}?`}
+                          title={`Apa itu ${slice.instrument}?`}
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                            isOpen
+                              ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                              : "border-border text-muted hover:border-[var(--accent)]/50 hover:text-[var(--accent)]"
+                          }`}
+                        >
+                          <Info className="h-3 w-3" />
+                        </button>
+                      )}
+                    </span>
+                    <span className="shrink-0 font-medium tabular-nums text-foreground">
+                      {slice.percentage}%
+                    </span>
+                  </div>
+                  {info && isOpen && (
+                    <div className="ml-4.5 rounded-lg border border-border bg-background px-3 py-2.5">
+                      <p className="text-xs font-medium text-foreground">
+                        {info.label}
+                      </p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                        {info.desc}
+                      </p>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
+          <p className="flex items-center gap-1.5 text-xs text-muted">
+            <Info className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+            Ketuk ikon <span className="font-medium text-foreground">i</span> di
+            samping tiap instrumen untuk penjelasan singkatnya.
+          </p>
         </div>
 
         {onRestart && (

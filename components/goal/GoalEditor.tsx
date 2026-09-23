@@ -16,15 +16,15 @@ interface GoalEditorProps {
   initialName?: string | null;
   /** Nilai awal target (Rupiah, mode "ubah"); `null`/undefined → kosong. */
   initialTargetAmount?: number | null;
-  /** Nilai awal jangka waktu (tahun, mode "ubah"); `null`/undefined → kosong. */
-  initialHorizonYears?: number | null;
+  /** Nilai awal jangka waktu (bulan, mode "ubah"); `null`/undefined → kosong. */
+  initialHorizonMonths?: number | null;
   /** Dipanggil setelah Goal berhasil disimpan (POST /api/goal 201). */
   onSaved: () => void;
   /** Bila disediakan, tampilkan tombol "Batal". */
   onCancel?: () => void;
 }
 
-type FieldKey = "targetAmount" | "horizonYears";
+type FieldKey = "targetAmount" | "horizonMonths";
 type FieldErrors = Partial<Record<FieldKey, string>>;
 
 /**
@@ -40,7 +40,7 @@ function validateTarget(value: string): string | undefined {
 }
 
 /**
- * Validasi horizonYears: wajib, bilangan bulat positif (mirror server, Req 5.4).
+ * Validasi horizonMonths: wajib, bilangan bulat positif (mirror server, Req 5.4).
  */
 function validateHorizon(value: string): string | undefined {
   const trimmed = value.trim();
@@ -48,7 +48,7 @@ function validateHorizon(value: string): string | undefined {
   const n = Number(trimmed);
   if (!Number.isFinite(n)) return "Harus berupa angka.";
   if (n <= 0) return "Harus lebih besar dari 0.";
-  if (!Number.isInteger(n)) return "Harus dalam tahun bulat (mis. 5).";
+  if (!Number.isInteger(n)) return "Harus dalam bulan bulat (mis. 60).";
   return undefined;
 }
 
@@ -56,17 +56,17 @@ function validateHorizon(value: string): string | undefined {
  * GoalEditor — form set/ubah Tujuan Aktif dari dashboard (Req 5).
  *
  * Field: `name` (opsional), `targetAmount` (Rupiah bergrup ribuan) dan
- * `horizonYears` (tahun, bilangan bulat). Validasi klien mencerminkan server
+ * `horizonMonths` (bulan, bilangan bulat). Validasi klien mencerminkan server
  * (target > 0; horizon bilangan bulat > 0) dan mencegah submit bila tidak
  * valid. Submit → POST /api/goal `{ name: name.trim() || null, targetAmount,
- * horizonYears }`; sukses (201) → `onSaved()`. Gagal → pesan error ramah
+ * horizonMonths }`; sukses (201) → `onSaved()`. Gagal → pesan error ramah
  * tanpa menghapus input pengguna. Pola input & token visual identik dengan
  * `GoalForm`/`BudgetForm` (Miami blue).
  */
 export default function GoalEditor({
   initialName,
   initialTargetAmount,
-  initialHorizonYears,
+  initialHorizonMonths,
   onSaved,
   onCancel,
 }: GoalEditorProps) {
@@ -76,9 +76,9 @@ export default function GoalEditor({
       ? formatThousands(String(initialTargetAmount))
       : ""
   );
-  const [horizonYears, setHorizonYears] = useState(
-    initialHorizonYears != null && Number.isFinite(initialHorizonYears)
-      ? String(initialHorizonYears)
+  const [horizonMonths, setHorizonMonths] = useState(
+    initialHorizonMonths != null && Number.isFinite(initialHorizonMonths)
+      ? String(initialHorizonMonths)
       : ""
   );
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -89,8 +89,8 @@ export default function GoalEditor({
     const next: FieldErrors = {};
     const targetErr = validateTarget(targetAmount);
     if (targetErr) next.targetAmount = targetErr;
-    const horizonErr = validateHorizon(horizonYears);
-    if (horizonErr) next.horizonYears = horizonErr;
+    const horizonErr = validateHorizon(horizonMonths);
+    if (horizonErr) next.horizonMonths = horizonErr;
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -102,7 +102,7 @@ export default function GoalEditor({
     if (!validateAll()) return;
 
     const target = parseThousands(targetAmount) ?? 0;
-    const horizon = Number(horizonYears.trim());
+    const horizon = Number(horizonMonths.trim());
     const trimmedName = name.trim();
 
     setSubmitting(true);
@@ -113,7 +113,7 @@ export default function GoalEditor({
         body: JSON.stringify({
           name: trimmedName || null,
           targetAmount: target,
-          horizonYears: horizon,
+          horizonMonths: horizon,
         }),
       });
 
@@ -218,12 +218,12 @@ export default function GoalEditor({
 
       {/* Jangka waktu */}
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="horizonYears" className="text-sm font-medium text-foreground">
-          Jangka waktu <span className="font-normal text-muted">(tahun)</span>
+        <label htmlFor="horizonMonths" className="text-sm font-medium text-foreground">
+          Jangka waktu <span className="font-normal text-muted">(bulan)</span>
         </label>
         <div
           className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(0,180,216,0.12)] ${
-            errors.horizonYears
+            errors.horizonMonths
               ? "border-red-400"
               : "border-border focus-within:border-[var(--accent)]/50"
           }`}
@@ -232,32 +232,32 @@ export default function GoalEditor({
             <CalendarClock className="h-4 w-4" />
           </span>
           <input
-            id="horizonYears"
-            name="horizonYears"
+            id="horizonMonths"
+            name="horizonMonths"
             type="number"
             inputMode="numeric"
             min={1}
             step={1}
-            value={horizonYears}
+            value={horizonMonths}
             onChange={(e) => {
-              setHorizonYears(e.target.value);
-              if (errors.horizonYears) setErrors((p) => ({ ...p, horizonYears: undefined }));
+              setHorizonMonths(e.target.value);
+              if (errors.horizonMonths) setErrors((p) => ({ ...p, horizonMonths: undefined }));
               if (apiError) setApiError(null);
             }}
-            placeholder="5"
-            aria-invalid={errors.horizonYears ? true : undefined}
-            aria-describedby={errors.horizonYears ? "horizonYears-error" : "horizonYears-hint"}
+            placeholder="60"
+            aria-invalid={errors.horizonMonths ? true : undefined}
+            aria-describedby={errors.horizonMonths ? "horizonMonths-error" : "horizonMonths-hint"}
             className="min-w-0 flex-1 bg-transparent text-[0.9375rem] text-foreground placeholder:text-muted focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
-          <span className="shrink-0 text-sm text-muted">tahun</span>
+          <span className="shrink-0 text-sm text-muted">bulan</span>
         </div>
-        {errors.horizonYears ? (
-          <p id="horizonYears-error" className="text-xs text-red-500">
-            {errors.horizonYears}
+        {errors.horizonMonths ? (
+          <p id="horizonMonths-error" className="text-xs text-red-500">
+            {errors.horizonMonths}
           </p>
         ) : (
-          <p id="horizonYears-hint" className="text-xs text-muted">
-            Berapa lama Anda ingin mencapai tujuan ini.
+          <p id="horizonMonths-hint" className="text-xs text-muted">
+            Berapa lama Anda ingin mencapai tujuan ini (dalam bulan).
           </p>
         )}
       </div>

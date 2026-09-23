@@ -20,8 +20,8 @@ export interface BudgetFormValues {
   monthlyExpense: number;
   /** Target_Amount (Rupiah). Berhingga > 0. */
   targetAmount: number;
-  /** Horizon_Years (tahun). Bilangan bulat > 0. */
-  horizonYears: number;
+  /** Horizon_Months (bulan). Bilangan bulat > 0. */
+  horizonMonths: number;
 }
 
 interface BudgetFormProps {
@@ -44,17 +44,17 @@ interface BudgetFormProps {
    */
   defaultTargetAmount?: number | null;
   /**
-   * Prefill Horizon_Years dari `Active_Goal` (tahun); `null` bila tak ada.
+   * Prefill Horizon_Months dari `Active_Goal` (bulan); `null` bila tak ada.
    * Pengguna boleh menimpa (override satu kali) — tidak mengubah tujuan tersimpan.
    */
-  defaultHorizonYears?: number | null;
+  defaultHorizonMonths?: number | null;
   /** Dipanggil dengan nilai terparsir saat form valid dan disubmit. */
   onSubmit: (values: BudgetFormValues) => void;
   /** Menonaktifkan tombol submit selama proses berlangsung. */
   submitting?: boolean;
 }
 
-type FieldKey = "monthlyIncome" | "monthlyExpense" | "targetAmount" | "horizonYears";
+type FieldKey = "monthlyIncome" | "monthlyExpense" | "targetAmount" | "horizonMonths";
 type FieldErrors = Partial<Record<FieldKey, string>>;
 
 /** Format angka ke Rupiah gaya Indonesia (10000 → "Rp 10.000"). */
@@ -89,8 +89,8 @@ function validateTargetAmount(value: string): string | undefined {
   return undefined;
 }
 
-/** Validasi Horizon_Years: wajib, bilangan bulat > 0 (mirror server Req 21.4). */
-function validateHorizonYears(value: string): string | undefined {
+/** Validasi Horizon_Months: wajib, bilangan bulat > 0 (mirror server Req 21.4). */
+function validateHorizonMonths(value: string): string | undefined {
   const trimmed = value.trim();
   if (trimmed === "") return "Wajib diisi.";
   const n = Number(trimmed);
@@ -102,7 +102,7 @@ function validateHorizonYears(value: string): string | undefined {
 
 /**
  * BudgetForm — form goal-driven (Req 17.2, 17.3, 21.1). Pengguna memberi
- * Monthly_Income (prefill dari profil), Target_Amount, dan Horizon_Years;
+ * Monthly_Income (prefill dari profil), Target_Amount, dan Horizon_Months;
  * `currentSavings` ditampilkan read-only sebagai konteks. Validasi klien
  * mencerminkan server (income>0, target>0, horizon bilangan bulat>0) dan
  * mencegah submit bila tidak valid.
@@ -112,7 +112,7 @@ export default function BudgetForm({
   defaultMonthlyExpense,
   currentSavings,
   defaultTargetAmount,
-  defaultHorizonYears,
+  defaultHorizonMonths,
   onSubmit,
   submitting = false,
 }: BudgetFormProps) {
@@ -133,10 +133,10 @@ export default function BudgetForm({
       ? formatThousands(String(defaultTargetAmount))
       : ""
   );
-  // Prefill Horizon_Years dari Active_Goal (string) bila tersedia.
-  const [horizonYears, setHorizonYears] = useState(
-    defaultHorizonYears != null && Number.isFinite(defaultHorizonYears)
-      ? String(defaultHorizonYears)
+  // Prefill Horizon_Months dari Active_Goal (string) bila tersedia.
+  const [horizonMonths, setHorizonMonths] = useState(
+    defaultHorizonMonths != null && Number.isFinite(defaultHorizonMonths)
+      ? String(defaultHorizonMonths)
       : ""
   );
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -155,8 +155,8 @@ export default function BudgetForm({
     if (expenseErr) next.monthlyExpense = expenseErr;
     const targetErr = validateTargetAmount(targetAmount);
     if (targetErr) next.targetAmount = targetErr;
-    const horizonErr = validateHorizonYears(horizonYears);
-    if (horizonErr) next.horizonYears = horizonErr;
+    const horizonErr = validateHorizonMonths(horizonMonths);
+    if (horizonErr) next.horizonMonths = horizonErr;
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -170,7 +170,7 @@ export default function BudgetForm({
       monthlyIncome: parseThousands(monthlyIncome) ?? 0,
       monthlyExpense: parseThousands(monthlyExpense) ?? 0,
       targetAmount: parseThousands(targetAmount) ?? 0,
-      horizonYears: Number(horizonYears.trim()),
+      horizonMonths: Number(horizonMonths.trim()),
     });
   }
 
@@ -330,14 +330,14 @@ export default function BudgetForm({
         )}
       </div>
 
-      {/* Horizon_Years */}
+      {/* Horizon_Months */}
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="horizonYears" className="text-sm font-medium text-foreground">
-          Jangka waktu <span className="font-normal text-muted">(tahun)</span>
+        <label htmlFor="horizonMonths" className="text-sm font-medium text-foreground">
+          Jangka waktu <span className="font-normal text-muted">(bulan)</span>
         </label>
         <div
           className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(0,180,216,0.12)] ${
-            errors.horizonYears
+            errors.horizonMonths
               ? "border-red-400"
               : "border-border focus-within:border-[var(--accent)]/50"
           }`}
@@ -346,34 +346,34 @@ export default function BudgetForm({
             <CalendarClock className="h-4 w-4" />
           </span>
           <input
-            id="horizonYears"
-            name="horizonYears"
+            id="horizonMonths"
+            name="horizonMonths"
             type="number"
             inputMode="numeric"
             min={1}
             step={1}
-            value={horizonYears}
+            value={horizonMonths}
             onChange={(e) => {
-              setHorizonYears(e.target.value);
-              if (errors.horizonYears)
-                setErrors((p) => ({ ...p, horizonYears: undefined }));
+              setHorizonMonths(e.target.value);
+              if (errors.horizonMonths)
+                setErrors((p) => ({ ...p, horizonMonths: undefined }));
             }}
             placeholder="0"
-            aria-invalid={errors.horizonYears ? true : undefined}
+            aria-invalid={errors.horizonMonths ? true : undefined}
             aria-describedby={
-              errors.horizonYears ? "horizonYears-error" : "horizonYears-hint"
+              errors.horizonMonths ? "horizonMonths-error" : "horizonMonths-hint"
             }
             className="min-w-0 flex-1 bg-transparent text-[0.9375rem] text-foreground placeholder:text-muted focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
-          <span className="shrink-0 text-sm text-muted">tahun</span>
+          <span className="shrink-0 text-sm text-muted">bulan</span>
         </div>
-        {errors.horizonYears ? (
-          <p id="horizonYears-error" className="text-xs text-red-500">
-            {errors.horizonYears}
+        {errors.horizonMonths ? (
+          <p id="horizonMonths-error" className="text-xs text-red-500">
+            {errors.horizonMonths}
           </p>
         ) : (
-          <p id="horizonYears-hint" className="text-xs text-muted">
-            Berapa tahun untuk mencapai target ini.
+          <p id="horizonMonths-hint" className="text-xs text-muted">
+            Berapa bulan untuk mencapai target ini.
           </p>
         )}
       </div>

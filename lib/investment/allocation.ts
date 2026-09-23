@@ -86,22 +86,24 @@ const ALLOCATION_MATRIX: {
 };
 
 /**
- * Mengelompokkan horizon (dalam tahun) ke bucket:
- * - horizonYears < 2        → "<2"
- * - 2 <= horizonYears <= 5  → "2-5" (batas 2 dan 5 inklusif)
- * - horizonYears > 5        → ">5"
+ * Mengelompokkan horizon (dalam bulan) ke bucket. Ambang setara aturan lama
+ * berbasis tahun (× 12): < 2 tahun = < 24 bulan, 2..5 tahun = 24..60 bulan,
+ * > 5 tahun = > 60 bulan.
+ * - horizonMonths < 24         → "<2"
+ * - 24 <= horizonMonths <= 60  → "2-5" (batas 24 dan 60 inklusif)
+ * - horizonMonths > 60         → ">5"
  *
  * Melempar Error untuk horizon non-positif (Req 4.9).
  */
-export function bucketHorizon(horizonYears: number): HorizonBucket {
-  if (!Number.isFinite(horizonYears) || horizonYears <= 0) {
+export function bucketHorizon(horizonMonths: number): HorizonBucket {
+  if (!Number.isFinite(horizonMonths) || horizonMonths <= 0) {
     throw new Error(
-      `Horizon tidak valid: harus bernilai positif, diterima ${horizonYears}.`
+      `Horizon tidak valid: harus bernilai positif, diterima ${horizonMonths}.`
     );
   }
 
-  if (horizonYears < 2) return "<2";
-  if (horizonYears <= 5) return "2-5";
+  if (horizonMonths < 24) return "<2";
+  if (horizonMonths <= 60) return "2-5";
   return ">5";
 }
 
@@ -122,7 +124,7 @@ function cloneAllocation(allocation: Allocation): Allocation {
 }
 
 /**
- * Memetakan (horizonYears, riskProfile) ke Allocation sesuai Allocation_Matrix.
+ * Memetakan (horizonMonths, riskProfile) ke Allocation sesuai Allocation_Matrix.
  *
  * - Untuk bucket "<2", riskProfile diabaikan (Req 4.2).
  * - Melempar Error untuk input tidak valid: horizon non-positif atau
@@ -131,11 +133,11 @@ function cloneAllocation(allocation: Allocation): Allocation {
  * Mengembalikan salinan baru agar konstanta matriks tidak termutasi pemanggil.
  */
 export function getAllocation(
-  horizonYears: number,
+  horizonMonths: number,
   riskProfile: RiskProfile
 ): Allocation {
   // bucketHorizon memvalidasi horizon non-positif dan melempar error.
-  const bucket = bucketHorizon(horizonYears);
+  const bucket = bucketHorizon(horizonMonths);
 
   if (bucket === "<2") {
     // Risk_Profile diabaikan untuk horizon pendek (Req 4.2).
