@@ -9,12 +9,16 @@ import {
   CheckCircle2,
   RotateCcw,
 } from "lucide-react";
+import TradeOffCards from "./TradeOffCards";
 import type { GoalBudgetResult } from "@/types/planner";
+import type { TradeOffOption } from "@/types/usp";
 
 interface BudgetResultCardProps {
   result: GoalBudgetResult;
   /** Mulai ulang alur dari awal (opsional). */
   onRestart?: () => void;
+  /** Callback saat pengguna menerapkan salah satu solusi trade-off. */
+  onApplySolution?: (payload: TradeOffOption["actionPayload"]) => void;
 }
 
 /** Warna bar per pos, diputar bila melebihi daftar (mengikuti RecommendationCard). */
@@ -57,6 +61,7 @@ function formatYears(years: number): string {
 export default function BudgetResultCard({
   result,
   onRestart,
+  onApplySolution,
 }: BudgetResultCardProps) {
   const {
     monthlyIncome,
@@ -65,6 +70,7 @@ export default function BudgetResultCard({
     lines,
     alreadyReached,
     feasibility,
+    tradeOffs,
   } = result;
 
   const years = monthsN / 12;
@@ -193,6 +199,11 @@ export default function BudgetResultCard({
               {feasibility.reason}
             </p>
           </div>
+        )}
+
+        {/* Opsi solusi Trade-Off (1-Click Apply) */}
+        {showWarning && tradeOffs && tradeOffs.length > 0 && onApplySolution && (
+          <TradeOffCards options={tradeOffs} onApply={onApplySolution} />
         )}
 
         {onRestart && (

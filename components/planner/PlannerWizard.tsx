@@ -53,6 +53,7 @@ export default function PlannerWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GoalBudgetResult | null>(null);
+  const [lastSubmittedValues, setLastSubmittedValues] = useState<BudgetFormValues | null>(null);
 
   // Muat konteks awal saat mount: defaultMonthlyIncome + currentSavings.
   useEffect(() => {
@@ -102,6 +103,7 @@ export default function PlannerWizard() {
     setSubmitting(true);
     setError(null);
     setResult(null);
+    setLastSubmittedValues(values);
 
     try {
       const res = await fetch("/api/budget", {
@@ -137,12 +139,34 @@ export default function PlannerWizard() {
     }
   }
 
+  /** Terapkan salah satu trade-off secara instan (1-Click Apply). */
+  async function handleApplySolution(payload: {
+    targetAmount?: number;
+    horizonMonths?: number;
+    monthlyExpense?: number;
+  }) {
+    if (!lastSubmittedValues) return;
+    const newValues: BudgetFormValues = {
+      monthlyIncome: lastSubmittedValues.monthlyIncome,
+      monthlyExpense: payload.monthlyExpense ?? lastSubmittedValues.monthlyExpense,
+      targetAmount: payload.targetAmount ?? lastSubmittedValues.targetAmount,
+      horizonMonths: payload.horizonMonths ?? lastSubmittedValues.horizonMonths,
+    };
+
+    setDefaultMonthlyExpense(newValues.monthlyExpense);
+    setDefaultTargetAmount(newValues.targetAmount);
+    setDefaultHorizonMonths(newValues.horizonMonths);
+
+    await handleFormSubmit(newValues);
+  }
+
   /** Ulang seluruh alur dari awal. */
   function handleRestart() {
     setStep(1);
     setResult(null);
     setError(null);
     setSubmitting(false);
+    setLastSubmittedValues(null);
   }
 
   return (
@@ -247,7 +271,11 @@ export default function PlannerWizard() {
           )}
 
           {!submitting && !error && result && (
-            <BudgetResultCard result={result} onRestart={handleRestart} />
+            <BudgetResultCard
+              result={result}
+              onRestart={handleRestart}
+              onApplySolution={handleApplySolution}
+            />
           )}
         </>
       )}

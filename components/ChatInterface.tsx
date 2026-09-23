@@ -1,23 +1,39 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Sparkles, Wallet, PiggyBank, TrendingDown } from "lucide-react";
+import { ArrowUp, Sparkles, Wallet, PiggyBank, TrendingDown, ShieldCheck, Target, AlertCircle } from "lucide-react";
 import MessageBubble from "@/components/MessageBubble";
 import type { Message } from "@/types/chat";
 
 const STREAM_ERROR_SENTINEL = "[[STREAM_ERROR]]";
 const MAX_HISTORY = 20;
 
-const QUICK_PROMPTS = [
-  { icon: Wallet, text: "Bantu alokasi gaji bulanan saya Rp 10 juta" },
-  { icon: PiggyBank, text: "Hitung kebutuhan dana darurat untuk status lajang" },
-  { icon: TrendingDown, text: "Strategi pelunasan utang berbunga tinggi" },
+const STATIC_QUICK_PROMPTS = [
+  { icon: Wallet, text: "Bagaimana cara mengoptimalkan alokasi gaji bulanan saya?" },
+  { icon: PiggyBank, text: "Berapa dana darurat ideal untuk kondisi pengeluaran saya saat ini?" },
+  { icon: TrendingDown, text: "Strategi pelunasan utang berbunga tinggi terbaik buat saya?" },
 ];
+
+const CONTEXTUAL_PROMPTS = {
+  impossible: { icon: AlertCircle, text: "Target tabungan saya defisit — strategi apa yang paling efektif?" },
+  tight: { icon: AlertCircle, text: "Anggaran saya sangat ketat, bagaimana cara mengatasinya?" },
+  vulnerable: { icon: ShieldCheck, text: "Dana darurat saya kurang dari 3 bulan. Harus mulai dari mana?" },
+  hasGoal: { icon: Target, text: "Apakah alokasi investasi saya sudah optimal untuk target yang saya tetapkan?" },
+};
+
+interface QuickPromptContext {
+  feasibility?: "ok" | "tight" | "impossible" | null;
+  emergencyCoverage?: number | null;
+  hasGoal?: boolean;
+  hasProfile?: boolean;
+}
 
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [promptContext, setPromptContext] = useState<QuickPromptContext>({});
+  const [contextSynced, setContextSynced] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -33,6 +49,41 @@ export default function ChatInterface() {
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }, [input]);
+
+  // Muat konteks finansial dari API Budget untuk quick prompt kontekstual.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [budgetRes, goalRes] = await Promise.all([
+          fetch("/api/budget", { method: "GET" }),
+          fetch("/api/goal", { method: "GET" }),
+        ]);
+        const ctx: QuickPromptContext = {};
+        if (budgetRes.ok) {
+          const budgetData = await budgetRes.json();
+          ctx.hasProfile = budgetData?.defaultMonthlyIncome != null;
+          if (budgetData?.latestPlan?.breakdown) {
+            ctx.feasibility = budgetData.latestPlan?.savingsTargetAmount ? "ok" : null;
+          }
+          const income = budgetData?.defaultMonthlyIncome;
+          const expense = budgetData?.monthlyExpense;
+          const savings = budgetData?.currentSavings;
+          if (expense > 0 && savings != null) {
+            ctx.emergencyCoverage = savings / expense;
+          }
+        }
+        if (goalRes.ok) {
+          const goalData = await goalRes.json();
+          ctx.hasGoal = goalData?.id != null;
+        }
+        setPromptContext(ctx);
+        setContextSynced(true);
+      } catch {
+        /* offline — tampilkan prompt statis */
+        setContextSynced(false);
+      }
+    })();
+  }, []);
 
   async function handleSend(text: string) {
     const trimmed = text.trim();
@@ -144,8 +195,14 @@ export default function ChatInterface() {
             <Sparkles className="h-4 w-4 text-white" />
           </div>
           <h1 className="text-[0.95rem] font-medium tracking-tight text-foreground">
-            TabungOne
+            alxfinancial
           </h1>
+          {contextSynced && promptContext.hasProfile && (
+            <span className="ml-auto flex items-center gap-1.5 rounded-full border border-emerald-200/60 bg-emerald-50/80 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:border-emerald-700/40 dark:bg-emerald-950/40 dark:text-emerald-400">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+              Data finansial terhubung
+            </span>
+          )}
         </div>
       </header>
 
@@ -153,7 +210,7 @@ export default function ChatInterface() {
       <main className="scroll-area flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-4 py-8">
           {isEmpty ? (
-            <EmptyState onPick={handleSend} disabled={isGenerating} />
+            <EmptyState onPick={handleSend} disabled={isGenerating} context={promptContext} />
           ) : (
             <div className="flex flex-col gap-6">
               {messages.map((m, i) => (
@@ -211,10 +268,35 @@ export default function ChatInterface() {
 function EmptyState({
   onPick,
   disabled,
+  context,
 }: {
   onPick: (text: string) => void;
   disabled: boolean;
+  context: QuickPromptContext;
 }) {
+  // Susun daftar prompt yang paling relevan dengan kondisi pengguna saat ini
+  const prompts: { icon: typeof Wallet; text: string }[] = [];
+
+  if (context.feasibility === "impossible") {
+    prompts.push(CONTEXTUAL_PROMPTS.impossible);
+  } else if (context.feasibility === "tight") {
+    prompts.push(CONTEXTUAL_PROMPTS.tight);
+  }
+
+  if (context.emergencyCoverage != null && context.emergencyCoverage < 3) {
+    prompts.push(CONTEXTUAL_PROMPTS.vulnerable);
+  }
+
+  if (context.hasGoal) {
+    prompts.push(CONTEXTUAL_PROMPTS.hasGoal);
+  }
+
+  // Lengkapi dengan prompt statis sampai minimal 3
+  for (const p of STATIC_QUICK_PROMPTS) {
+    if (prompts.length >= 3) break;
+    prompts.push(p);
+  }
+
   return (
     <div className="flex animate-fade-in flex-col items-center gap-8 py-16 text-center">
       <div className="flex flex-col items-center gap-4">
@@ -226,13 +308,15 @@ function EmptyState({
             Halo, ada yang bisa dibantu?
           </h2>
           <p className="mt-2 text-[0.9375rem] text-muted">
-            Konsultasikan rencana keuangan Anda. Pilih topik atau ketik langsung.
+            {context.hasProfile
+              ? "Saya sudah terhubung ke data finansial Anda. Tanyakan apa saja!"
+              : "Konsultasikan rencana keuangan Anda. Pilih topik atau ketik langsung."}
           </p>
         </div>
       </div>
 
       <div className="grid w-full gap-2.5 sm:grid-cols-1">
-        {QUICK_PROMPTS.map((q, i) => {
+        {prompts.map((q, i) => {
           const Icon = q.icon;
           return (
             <button

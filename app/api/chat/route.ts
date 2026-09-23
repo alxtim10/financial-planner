@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 import { FINANCIAL_PLANNER_PROMPT } from "@/lib/prompt";
+import { getFinancialTwinContext } from "@/lib/ai/financialContext";
 import type { ChatRequest } from "@/types/chat";
 
 export const runtime = "nodejs";
@@ -59,13 +60,16 @@ export async function POST(req: Request) {
   const startedAt = Date.now();
   console.log(`[chat] -> ${MODEL} | history=${trimmed.length} | msg="${message.slice(0, 60)}"`);
 
+  const dynamicContext = await getFinancialTwinContext();
+  const effectiveSystemPrompt = `${FINANCIAL_PLANNER_PROMPT}${dynamicContext}`;
+
   let geminiStream: Awaited<ReturnType<typeof ai.models.generateContentStream>>;
   try {
     geminiStream = await ai.models.generateContentStream({
       model: MODEL,
       contents,
       config: {
-        systemInstruction: FINANCIAL_PLANNER_PROMPT,
+        systemInstruction: effectiveSystemPrompt,
         temperature: 0.4,
       },
     });

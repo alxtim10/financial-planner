@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getLatestProfile } from "@/lib/profileGate";
 import { getActiveGoal } from "@/lib/goal";
 import { computeGoalBudget } from "@/lib/planner/goalBudget";
+import { computeTradeOffs } from "@/lib/planner/tradeoffs";
 import type { GoalBudgetResult } from "@/types/planner";
 
 export const runtime = "nodejs";
@@ -163,6 +164,19 @@ export async function POST(req: Request) {
       horizonMonths,
       monthlyExpense: resolvedMonthlyExpense,
     });
+
+    if (result.feasibility.severity !== "ok") {
+      result.tradeOffs = computeTradeOffs({
+        monthlyIncome,
+        monthlyExpense: resolvedMonthlyExpense,
+        currentSavings,
+        targetAmount,
+        horizonMonths,
+        ditabung: result.ditabung,
+        kebutuhan: result.kebutuhan,
+        keinginan: result.keinginan,
+      });
+    }
   } catch (err) {
     console.error("[budget] input mesin goal-driven tidak valid:", err);
     return NextResponse.json(

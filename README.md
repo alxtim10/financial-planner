@@ -44,7 +44,7 @@ Investasi & Planner **memprefill** target/jangka waktu dari Tujuan Aktif; penggu
    ```
    - `GEMINI_API_KEY` — key dari Google AI Studio (jangan pakai prefix `NEXT_PUBLIC_`).
    - `GEMINI_MODEL` — opsional, default `gemini-flash-lite-latest` (alternatif `gemini-flash-latest`).
-   - `DATABASE_URL` — koneksi Supabase **pooled** (PgBouncer, port `6543`, akhiri `?pgbouncer=true`); dipakai runtime aplikasi.
+   - `DATABASE_URL` — koneksi Supabase **pooled** (PgBouncer, port `6543`, akhiri `?pgbouncer=true&sslmode=require&uselibpqcompat=true`); dipakai runtime aplikasi melalui driver adapter `@prisma/adapter-pg`.
    - `DIRECT_URL` — koneksi Supabase **langsung** (port `5432`); dipakai Prisma untuk migrasi.
 
    Ambil kedua string koneksi dari Supabase Dashboard → **Project Settings → Database → Connection string**.
@@ -61,7 +61,7 @@ Investasi & Planner **memprefill** target/jangka waktu dari Tujuan Aktif; penggu
    DATABASE_URL="<pooled-url>" DIRECT_URL="<direct-url>" npx prisma migrate deploy
    ```
 
-   > **Catatan macOS + Supabase (TLS).** Runtime aplikasi (Prisma Client) terhubung normal ke Supabase. Namun *schema/migration engine* Prisma di macOS memakai Apple Secure Transport yang tidak mendukung TLS 1.3, sedangkan pooler Supabase menegosiasikan TLS 1.3 — sehingga `prisma migrate deploy/dev` bisa gagal dengan `P1011: Error opening a TLS connection`. Bila ini terjadi, terapkan skema lewat `psql` (yang memakai OpenSSL) sebagai fallback:
+   > **Catatan macOS + Supabase (TLS).** Pooler Supabase hanya menerima **TLS 1.3**, sedangkan engine native Prisma di macOS memakai Apple Secure Transport yang berhenti di TLS 1.2. Karena itu **runtime** memakai driver adapter `@prisma/adapter-pg` (`pg` → OpenSSL Node, mendukung TLS 1.3); lihat `lib/db.ts`. *Schema/migration engine* Prisma tetap memakai Apple Secure Transport sehingga `prisma migrate deploy/dev` bisa gagal dengan `P1011: Error opening a TLS connection`. Bila ini terjadi, terapkan skema lewat `psql` (yang memakai OpenSSL) sebagai fallback:
    > ```bash
    > # generate SQL skema penuh (offline, tanpa koneksi DB)
    > npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > schema.sql

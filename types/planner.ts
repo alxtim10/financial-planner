@@ -113,4 +113,5 @@ export interface GoalBudgetResult {
   lines: BudgetLine[]; // tiga pos (Kebutuhan/Keinginan/Ditabung); percentage = Derived_Percentage; isSavings true hanya untuk Ditabung
   alreadyReached: boolean; // currentSavings >= targetAmount → ditabung 0
   feasibility: GoalFeasibility;
+  tradeOffs?: import("./usp").TradeOffOption[];
 }
