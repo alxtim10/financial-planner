@@ -26,12 +26,26 @@ export interface TradeOffInput {
   keinginan: number;
 }
 
+export type EmergencyFundTier = "VULNERABLE" | "ADEQUATE" | "STRONG";
+
+export interface EmergencyFundAnalysis {
+  /** Rasio tabungan likuid terhadap pengeluaran bulanan (dibulatkan 1 desimal). */
+  coverageMonths: number;
+  tier: EmergencyFundTier;
+  /** Target bulan pengeluaran ideal (standar 6 bulan). */
+  targetMonths: number;
+  /** Kekurangan nominal untuk mencapai target dana darurat (0 bila sudah cukup). */
+  shortfallAmount: number;
+  advisoryMessage: string;
+}
+
 export interface FinancialTwinSnapshot {
   hasProfile: boolean;
   income?: number;
   expense?: number;
   currentSavings?: number;
   emergencyFundCoverageMonths?: number;
+  emergencyTier?: EmergencyFundTier;
   activeGoal?: {
     name?: string | null;
     targetAmount: number;

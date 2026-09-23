@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getLatestProfile } from "@/lib/profileGate";
 import { getActiveGoal } from "@/lib/goal";
+import { evaluateEmergencyFund } from "@/lib/financial/emergencyFund";
 
 /** Format angka Rupiah ke format Indonesia yang rapi */
 function fmt(val: number): string {
@@ -33,12 +34,12 @@ export async function getFinancialTwinContext(): Promise<string> {
     lines.push("Berikut adalah data kondisi keuangan riil pengguna saat ini di TabungOne. Gunakan data ini secara langsung tanpa perlu bertanya ulang:");
 
     if (profile) {
-      const coverage = profile.expense > 0 ? (profile.currentSavings / profile.expense).toFixed(1) : "N/A";
+      const emergency = evaluateEmergencyFund(profile.currentSavings, profile.expense);
       lines.push(`• **Profil Finansial**:`);
       lines.push(`  - Pemasukan Bulanan: ${fmt(profile.income)}`);
       lines.push(`  - Pengeluaran Bulanan: ${fmt(profile.expense)}`);
       lines.push(`  - Tabungan Saat Ini: ${fmt(profile.currentSavings)}`);
-      lines.push(`  - Rasio Kesiapan Dana Darurat: ${coverage} bulan pengeluaran (${Number(coverage) < 3 ? "Kurang / Vulnerable" : Number(coverage) <= 6 ? "Memadai / Adequate" : "Kuat / Strong"})`);
+      lines.push(`  - Rasio Kesiapan Dana Darurat: ${emergency.coverageMonths} bulan pengeluaran (${emergency.tier})`);
     } else {
       lines.push(`• **Profil Finansial**: Belum diisi.`);
     }

@@ -13,6 +13,7 @@ import {
 import { getLatestProfile } from "@/lib/profileGate";
 import { getActiveGoal } from "@/lib/goal";
 import ActiveGoalCard from "@/components/goal/ActiveGoalCard";
+import EmergencyFundCard from "@/components/profile/EmergencyFundCard";
 
 // Halaman ini membaca Financial_Profile dari DB (Prisma) saat request.
 // Paksa render dinamis agar `next build` tidak mencoba melakukan query DB
@@ -150,6 +151,14 @@ export default async function Home() {
             </div>
           )}
         </section>
+
+        {/* ── Indikator Dana Darurat (Req 3.1) ─────────────────── */}
+        {hasProfile && (
+          <EmergencyFundCard
+            currentSavings={profile.currentSavings}
+            expense={profile.expense}
+          />
+        )}
 
         {/* ── Kartu Tujuan Aktif (Req 4.5) ────────────────────── */}
         <ActiveGoalCard

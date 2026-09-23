@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import ProfileForm from "@/components/profile/ProfileForm";
+import EmergencyFundCard from "@/components/profile/EmergencyFundCard";
+import { getLatestProfile } from "@/lib/profileGate";
+
+// Halaman ini membaca Financial_Profile dari DB (Prisma) saat request untuk
+// menampilkan indikator dana darurat; paksa render dinamis.
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Profil Finansial — TabungOne",
@@ -10,9 +16,12 @@ export const metadata = {
 /**
  * Halaman onboarding Financial_Profile. Merupakan langkah wajib (gate) sebelum
  * mengakses Investment_Scope: pengguna mengisi pemasukan, pengeluaran, dan
- * tabungan saat ini terlebih dahulu.
+ * tabungan saat ini terlebih dahulu. Bila profil sudah ada, tampilkan juga
+ * indikator kesiapan dana darurat (Requirement 3.1).
  */
-export default function ProfilePage() {
+export default async function ProfilePage() {
+  const profile = await getLatestProfile();
+
   return (
     <div className="min-h-dvh bg-background">
       <div className="mx-auto w-full max-w-xl px-4 py-10 sm:py-14">
@@ -38,6 +47,13 @@ export default function ProfilePage() {
             tahap perencanaan investasi.
           </p>
         </div>
+
+        {profile && (
+          <EmergencyFundCard
+            currentSavings={profile.currentSavings}
+            expense={profile.expense}
+          />
+        )}
 
         <ProfileForm />
 

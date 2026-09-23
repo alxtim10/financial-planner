@@ -18,6 +18,12 @@ Rencana implementasi ini mengeksekusi fitur pembeda utama (**Unique Selling Poin
   - [x] 2.2 Buat unit test `lib/planner/tradeoffs.test.ts` menggunakan Vitest: uji kalkulasi horizon baru, target baru, handling input nol/negatif, dan kasus kelayakan ketat vs mustahil.
     - _Requirements: 1.2_
 
+- [x] 3. Modul logika murni Emergency Fund Waterfall (TDD)
+  - [x] 3.1 Implementasikan `lib/financial/emergencyFund.ts`: fungsi `evaluateEmergencyFund(currentSavings, expense)` untuk klasifikasi tier (`VULNERABLE`, `ADEQUATE`, `STRONG`) dan pesan edukasi.
+    - _Requirements: 3.1_
+  - [x] 3.2 Buat unit test `lib/financial/emergencyFund.test.ts` untuk menguji coverage threshold (<3 bulan, 3–6 bulan, >6 bulan, batas tepat 3/6, dan pengeluaran 0).
+    - _Requirements: 3.1_
+
 - [x] 4. Injeksi Konteks Finansial Cerdas pada AI Chatbot
   - [x] 4.1 Buat helper `lib/ai/financialContext.ts`: fungsi `getFinancialTwinContext()` yang membaca `FinancialProfile`, `Goal` aktif, `RiskAssessment`, dan `BudgetPlan` terbaru dari Prisma, lalu menyusun prompt naratif terstruktur.
     - _Requirements: 2.1_
@@ -41,6 +47,14 @@ Rencana implementasi ini mengeksekusi fitur pembeda utama (**Unique Selling Poin
   - [x] 7.2 Tambahkan badge pill "Data finansial terhubung" (dengan dot animasi) di header ChatInterface jika profil terdeteksi.
     - _Requirements: 2.1, 2.3_
 
+- [x] 8. UI Indikator Dana Darurat (Emergency Fund Badge)
+  - [x] 8.1 Buat komponen `components/profile/EmergencyFundCard.tsx` dengan visual tier warna (`VULNERABLE` merah, `ADEQUATE` amber, `STRONG` hijau), progres terhadap target 6 bulan, kekurangan nominal, dan saran edukatif.
+    - _Requirements: 3.1_
+  - [x] 8.2 Tampilkan kartu kesiapan dana darurat pada Dashboard utama (`app/page.tsx`) dan halaman Profil Finansial (`app/profile/page.tsx`).
+    - _Requirements: 3.1_
+  - [x] 8.3 Reuse `evaluateEmergencyFund` di `lib/ai/financialContext.ts` agar tier dana darurat pada konteks AI konsisten dengan UI.
+    - _Requirements: 2.1, 3.1_
+
 - [x] 9. Checkpoint & Pengujian End-to-End
-  - [x] 9.1 `npm test` — **4 tests, 2 test files** passed 100% hijau.
+  - [x] 9.1 `npm test` — **10 tests, 3 test files** passed 100% hijau.
   - [x] 9.2 `npx tsc --noEmit` — **0 error**, TypeScript type-check lulus bersih.
