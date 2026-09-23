@@ -45,7 +45,7 @@ financial-planner/
 │   ├── db.ts                       # Prisma Client singleton
 │   ├── goal.ts                     # Helper getActiveGoal() (server-side latest wins)
 │   ├── profileGate.ts              # Helper getLatestProfile() (server-side latest wins)
-│   ├── prompt.ts                   # System prompt alxfinancial AI
+│   ├── prompt.ts                   # System prompt TabungOne AI
 │   ├── smoke.test.ts               # Test suite runner
 │   ├── format/
 │   │   └── rupiahInput.ts          # Parser & formatter angka ribuan Rupiah
@@ -195,7 +195,7 @@ model BudgetPlan {
 
 ### 4.5 `POST /api/chat`
 - **Request:** `{ message: string, history: Array<{ role: "user" | "model", content: string }> }`.
-- **Response:** Streaming chunks teks polos dengan prompt `alxfinancial`.
+- **Response:** Streaming chunks teks polos dengan prompt `TabungOne`.
 
 ---
 

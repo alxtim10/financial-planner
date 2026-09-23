@@ -25,7 +25,7 @@ flowchart LR
     A[1. Profil Finansial\nGate Wajib] --> B[2. Tujuan Aktif\nDashboard]
     B --> C[3. Cakupan Investasi\nAlokasi & FV Annuity]
     B --> D[4. Cakupan Planner\nGoal-Driven Budget]
-    E[5. Asisten AI alxfinancial\nGlobal Drawer] -.Tersedia di semua halaman.-> A & B & C & D
+    E[5. Asisten AI TabungOne\nGlobal Drawer] -.Tersedia di semua halaman.-> A & B & C & D
 ```
 
 ### 2.1 Profil Finansial (Financial Profile - Gate Wajib)
@@ -51,7 +51,7 @@ flowchart LR
   2. **Hasil Anggaran:** Sistem menghitung pos **Ditabung** secara akumulasi murni, pos **Kebutuhan**, dan pos **Keinginan**, lalu menghasilkan persentase alokasi sebagai *output*.
 - **Evaluasi Kelayakan (Feasibility Check):** Memberikan status `ok`, `tight` (anggaran sangat ketat), atau `impossible` (setoran tabungan melebihi total pemasukan) beserta saran perbaikan.
 
-### 2.5 Asisten AI alxfinancial (Chatbot Drawer)
+### 2.5 Asisten AI TabungOne (Chatbot Drawer)
 - Asisten konsultasi keuangan yang dikemas dalam panel *drawer* geser dari kanan (`components/ChatDrawer.tsx`), dipicu melalui tombol sudut kanan atas di seluruh halaman.
 - Didukung model Google Gemini dengan *streaming response* dan persona perencana keuangan yang ramah, objektif, dan edukatif.
 

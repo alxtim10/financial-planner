@@ -75,7 +75,7 @@ Sistem menentukan alokasi aset berdasarkan kombinasi `horizonMonths` dan klasifi
 
 ---
 
-## 5. Asisten AI alxfinancial (Epic 5)
+## 5. Asisten AI TabungOne (Epic 5)
 
 ### Requirement 5.1: Drawer & Akses Global
 - Chatbot tersedia di pojok kanan atas seluruh halaman aplikasi melalui komponen *drawer*.

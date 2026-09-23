@@ -195,7 +195,7 @@ export default function ChatInterface() {
             <Sparkles className="h-4 w-4 text-white" />
           </div>
           <h1 className="text-[0.95rem] font-medium tracking-tight text-foreground">
-            alxfinancial
+            TabungOne
           </h1>
           {contextSynced && promptContext.hasProfile && (
             <span className="ml-auto flex items-center gap-1.5 rounded-full border border-emerald-200/60 bg-emerald-50/80 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
