@@ -14,7 +14,7 @@
 **Fokus MVP: cakupan Investasi (Investment scope) saja.** Alur berpandu membawa pengguna dari kondisi keuangan mereka menuju rekomendasi alokasi investasi yang konkret dan proyeksi kontribusi bulanan.
 
 ### Alur inti MVP
-1. **Profil Finansial** (gate wajib): pengguna mengisi pemasukan bulanan, pengeluaran bulanan, dan tabungan saat ini. Tanpa profil ini, cakupan Investasi terkunci.
+1. **Profil Finansial** (gate wajib): pengguna mengisi pemasukan bulanan, pengeluaran bulanan, dan tabungan saat ini. Field pengeluaran diberi catatan agar menyertakan utang/angsuran dan membagi rata pengeluaran non-bulanan (mis. pajak kendaraan tahunan ÷ 12). Tanpa profil ini, cakupan Investasi terkunci.
 2. **Tujuan (Goal):** nominal target + jangka waktu **dalam bulan** (mis. Rp 100.000.000 dalam 60 bulan). Horizon diturunkan dari jangka waktu.
 3. **Profil Risiko:** survei singkat → skor → klasifikasi `Konservatif` / `Moderat` / `Agresif`.
 4. **Rekomendasi:** sistem menghitung alokasi berbasis aturan (matriks Horizon × Profil Risiko) + kontribusi bulanan yang diperlukan (Future Value of Annuity).
@@ -47,7 +47,7 @@ flowchart TD
         Risk[riskScoring.ts]
     end
 
-    Prof --> AProf --> DB[(PostgreSQL / Prisma)]
+    Prof --> AProf --> DB[(Supabase PostgreSQL / Prisma)]
     Inv --> AGoal --> DB
     Inv --> ARec
     ARec --> Risk
@@ -67,7 +67,7 @@ flowchart TD
 ### Tambahan untuk arah baru
 - **Database:** Supabase (PostgreSQL ter-host).
 - **ORM:** Prisma (`prisma`, `@prisma/client`), singleton client di `lib/db.ts`.
-- **Test runner:** Vitest (untuk logika murni `lib/investment/*`, TDD + property-based testing).
+- **Test runner:** Vitest (dikonfigurasi untuk logika murni `lib/*`). Saat ini hanya ada smoke test (`lib/smoke.test.ts`); belum ada suite unit/PBT khusus.
 
 ### Asumsi Database
 Database di-host di **Supabase**. Prisma memakai dua koneksi (pola standar Supabase):
@@ -86,14 +86,15 @@ DIRECT_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler
 
 ## 3. Model Data
 
-Empat model Prisma. Semua menyertakan `userId` **nullable** sebagai placeholder autentikasi masa depan (MVP tidak memakai auth).
+Lima model Prisma. Semua menyertakan `userId` **nullable** sebagai placeholder autentikasi masa depan (MVP tidak memakai auth).
 
 | Model | Field inti | Peran |
 |---|---|---|
 | `FinancialProfile` | `income`, `expense`, `currentSavings` | Sumber kebenaran kondisi keuangan; gate wajib. |
-| `Goal` | `targetAmount`, `horizonMonths` | Target + jangka waktu (bulan); sumber Horizon. |
+| `Goal` | `name?`, `targetAmount`, `horizonMonths` | Tujuan Aktif: nama opsional + target + jangka waktu (bulan); sumber Horizon. |
 | `RiskAssessment` | `answers`, `score`, `profile` | Hasil survei risiko + klasifikasi. |
-| `InvestmentRecommendation` | `riskProfile`, `composition` (Json), `annualReturn`, `monthlyContribution` | Rekomendasi akhir yang dipersistensi. |
+| `InvestmentRecommendation` | `goalId?`, `riskProfile`, `composition` (Json), `annualReturn`, `monthlyContribution` | Rekomendasi akhir yang dipersistensi. |
+| `BudgetPlan` | `presetId`, `baseAmount`, `mode`, `savingsTargetAmount?`, `savingsHorizonMonths?`, `breakdown` (Json) | Rencana anggaran goal-driven (Planner). Beberapa kolom lama (`manualSavingsTarget`, `includeSavings`, `investmentContribution`) dipensiunkan tetapi dipertahankan. |
 
 `FinancialProfile` adalah model terpusat: fitur roadmap (Planner, integrasi chatbot) akan membacanya sebagai konteks pengguna.
 
@@ -119,6 +120,8 @@ Empat model Prisma. Semua menyertakan `userId` **nullable** sebagai placeholder 
 - `horizonMonths > 60` → bucket `>5`.
 
 Implementasi: `lib/investment/allocation.ts` → `getAllocation(horizonMonths, riskProfile)`. Total persentase komposisi selalu 100%. Input tidak valid (profil di luar himpunan atau horizon non-positif) melempar error.
+
+Pada kartu hasil (`components/investment/RecommendationCard.tsx`), tiap instrumen dilengkapi tombol info ("i") berisi penjelasan singkat ramah-pemula (mis. RDPU, SBN, Emas, Saham), karena target pengguna adalah orang yang belum tentu paham instrumen investasi.
 
 ### 4.2 Kontribusi Bulanan (Future Value of Annuity)
 
@@ -170,8 +173,8 @@ Keputusan cakupan goal-driven (final):
   - **Persentase turunan (OUTPUT):** tiap pos `÷ monthlyIncome × 100` (kebutuhan% / keinginan% / ditabung%). Bukan input.
 - **Penilaian kelayakan (feasibility):** `impossible` bila `ditabung` saja melebihi `monthlyIncome` (peringatan terkuat); `tight` bila `ditabung + kebutuhan > monthlyIncome` atau `keinginan` sangat kecil (< 5% pemasukan) — dengan saran memperpanjang jangka waktu atau menurunkan target; `ok` bila sehat (tampilkan tiga pos tanpa peringatan).
 - **Dihapus dari alur (dibanding model lama):** 3 preset tetap, mode persentase Custom, `PresetPicker`, mode `terpisah`/`kombinasi` + shortfall, toggle `Include_Savings` (tabungan saat ini kini selalu saldo awal), dan cabang "Arah A time-to-goal" (horizon kini selalu diberikan). Persentase tidak pernah menjadi input. Catatan: komponen/modul lama tersebut **dipensiunkan tetapi masih ada di repo** (tidak dipakai alur goal-driven) — tidak dihapus fisik agar tidak perlu migrasi/pembersihan destruktif.
-- **Logika murni** di `lib/planner/goalBudget.ts` (`computeGoalBudget`) — akumulasi murni, diuji PBT (`fast-check`). Modul lama `presets.ts`/`budget.ts`/`savingsProjection.ts` dan komponen `PresetPicker.tsx` **dipensiunkan tetapi dipertahankan** di repo (tak dipakai UI/API goal-driven).
-- **Persistensi** ke `BudgetPlan` dengan **reuse kolom** yang sudah ada — **tanpa migrasi Prisma**: `presetId = "goal"` (penanda), `baseAmount = monthlyIncome`, `savingsTargetAmount = targetAmount`, `savingsHorizonMonths = horizonMonths`, `breakdown` = ketiga pos (Json); `mode`/`includeSavings`/`investmentContribution` null. Endpoint `GET /api/budget` mengembalikan `defaultMonthlyIncome` + `currentSavings` + `monthlyExpense`; `POST /api/budget` menerima `{ monthlyIncome, targetAmount, horizonYears, userId? }`.
+- **Logika murni** di `lib/planner/goalBudget.ts` (`computeGoalBudget`) — akumulasi murni, tanpa I/O/UI/DB. Modul lama `presets.ts`/`budget.ts`/`savingsProjection.ts` dan komponen `PresetPicker.tsx` **dipensiunkan tetapi dipertahankan** di repo (tak dipakai UI/API goal-driven).
+- **Persistensi** ke `BudgetPlan` dengan **reuse kolom** yang sudah ada: `presetId = "goal"` (penanda), `baseAmount = monthlyIncome`, `savingsTargetAmount = targetAmount`, `savingsHorizonMonths = horizonMonths`, `breakdown` = ketiga pos (Json); `mode` diisi `"goal"`, `includeSavings`/`investmentContribution` null. Endpoint `GET /api/budget` mengembalikan `defaultMonthlyIncome` + `currentSavings` + `monthlyExpense` (+ `goalTargetAmount`/`goalHorizonMonths`/`goalName` dari Tujuan Aktif); `POST /api/budget` menerima `{ monthlyIncome, monthlyExpense?, targetAmount, horizonMonths, userId? }`.
 - **Reuse pola yang ada:** `Profile_Gate` (gate wajib), Prisma singleton (`lib/db.ts`), helper input Rupiah (`lib/format/rupiahInput.ts`), pola visual `RecommendationCard`, token warna Miami blue, format Rupiah `Rp ${Math.round(v).toLocaleString("id-ID")}`, dan disclaimer edukatif. UI disederhanakan menjadi form (Tujuan & Pendapatan) → hasil.
 
 **Kontrak data yang dikonsumsi:** `income`, `expense`, dan `currentSavings` dari `FinancialProfile` terbaru menjadi masukan `computeGoalBudget` (income sebagai default `monthlyIncome`; expense sebagai `kebutuhan`; currentSavings sebagai saldo awal).
@@ -202,7 +205,7 @@ Chatbot membaca konteks pengguna untuk konsultasi yang personal. **Kontrak data 
 Field `userId` (nullable) sudah ada di semua model sejak awal, sehingga penambahan auth tidak memerlukan migrasi skema besar.
 
 ### Prinsip ekstensibilitas
-Semua logika investasi berada di `lib/investment/*` sebagai **pure function** yang dapat diimpor independen (tanpa dependensi UI/API/DB). Ini memastikan Planner dan integrasi chatbot dapat memakai ulang mesin aturan dan kalkulator proyeksi. Cakupan Planner mengikuti pola yang sama: logika penganggaran murni akan berada di `lib/planner/*` (`presets.ts`, `budget.ts`), hanya mengimpor tipe dari `@/types/planner`.
+Semua logika investasi berada di `lib/investment/*` sebagai **pure function** yang dapat diimpor independen (tanpa dependensi UI/API/DB). Ini memastikan Planner dan integrasi chatbot dapat memakai ulang mesin aturan dan kalkulator proyeksi. Cakupan Planner mengikuti pola yang sama: logika penganggaran murni berada di `lib/planner/*` (aktif: `goalBudget.ts`; dipensiunkan: `presets.ts`/`budget.ts`/`savingsProjection.ts`), hanya mengimpor tipe dari `@/types/planner`.
 
 ---
 
