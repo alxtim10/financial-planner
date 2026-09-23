@@ -33,7 +33,6 @@ export default function ChatInterface() {
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [promptContext, setPromptContext] = useState<QuickPromptContext>({});
-  const [contextSynced, setContextSynced] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -65,7 +64,6 @@ export default function ChatInterface() {
           if (budgetData?.latestPlan?.breakdown) {
             ctx.feasibility = budgetData.latestPlan?.savingsTargetAmount ? "ok" : null;
           }
-          const income = budgetData?.defaultMonthlyIncome;
           const expense = budgetData?.monthlyExpense;
           const savings = budgetData?.currentSavings;
           if (expense > 0 && savings != null) {
@@ -77,10 +75,8 @@ export default function ChatInterface() {
           ctx.hasGoal = goalData?.id != null;
         }
         setPromptContext(ctx);
-        setContextSynced(true);
       } catch {
         /* offline — tampilkan prompt statis */
-        setContextSynced(false);
       }
     })();
   }, []);
