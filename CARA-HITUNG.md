@@ -5,8 +5,9 @@ bahasa sehari-hari dan contoh nyata. Tidak perlu latar belakang matematika.
 
 > Semua angka dihitung dari **3 data** yang kamu isi — pemasukan, pengeluaran,
 > dan tabungan — ditambah **tujuan** (target dana & jangka waktu). Aplikasi tidak
-> menebak dan tidak menyimpan angka rahasia. Untuk versi teknis (lengkap dengan
-> rumus), lihat [`RUMUS.md`](./RUMUS.md).
+> menebak dan tidak menyimpan angka rahasia. Tiap bagian menyertakan **rumus
+> aslinya**; untuk versi teknis lengkap (sampai lokasi kode), lihat
+> [`RUMUS.md`](./RUMUS.md).
 
 Contoh yang dipakai di seluruh dokumen ini (biar konsisten):
 
@@ -41,6 +42,19 @@ Kekurangan          = target − tabungan   (0 kalau sudah cukup)
 
 Contoh: `Rp 6.000.000 × 6 = Rp 36.000.000`, lalu `Rp 36.000.000 − Rp 20.000.000
 = Rp 16.000.000` (masih kurang).
+
+**Rumus aslinya:**
+
+```text
+coverage        = tabungan / pengeluaran
+targetAmount    = pengeluaran × 6
+shortfallAmount = max(0, targetAmount − tabungan)
+coverageMonths  = coverage dibulatkan 1 desimal
+
+coverage < 3        → VULNERABLE  (Perlu perhatian)
+3 ≤ coverage ≤ 6    → ADEQUATE    (Memadai)
+coverage > 6        → STRONG      (Kuat)
+```
 
 **Arti warnanya:**
 
@@ -86,6 +100,26 @@ Persentase tiap pos = pos ÷ pemasukan × 100%
 ```
 
 Contoh: Ditabung 13,3% · Kebutuhan 60% · Keinginan 26,7%.
+
+**Rumus aslinya:**
+
+```text
+ditabung  = max(0, target − tabungan) / jumlah bulan
+kebutuhan = pengeluaran > 0 ? pengeluaran : round(0,65 × (pemasukan − ditabung))
+keinginan = pemasukan − ditabung − kebutuhan
+posPct    = pos / pemasukan × 100%
+
+sudahTercapai = tabungan ≥ target
+```
+
+Statusnya:
+
+```text
+tidak realistis  iff  ditabung > pemasukan
+selain itu, layak = (ditabung + kebutuhan ≤ pemasukan)
+sehat            iff  layak DAN keinginan ≥ 0,05 × pemasukan
+                         selain itu → "ketat"
+```
 
 **Kapan aplikasi memberi peringatan?**
 
@@ -138,6 +172,19 @@ menekannya sampai kira-kira **35% pemasukan** agar target tetap bisa dikejar.
 Contoh: dari kebutuhan `Rp 6.000.000` → disarankan `Rp 3.500.000`, hemat
 `Rp 2.500.000` per bulan.
 
+**Rumus aslinya:**
+
+```text
+buffer     = 0,05 × pemasukan
+kapasitas  = max(0, pemasukan − kebutuhan − buffer)
+
+Perpanjang waktu : bulanBaru  = ceil((target − tabungan) / kapasitas)
+Sesuaikan target : targetBaru = max(1.000.000,
+                                  floor((kapasitas × jumlahBulan + tabungan) / 500.000) × 500.000)
+Pangkas belanja  : batasPengeluaran = max(0,35 × pemasukan,
+                                  floor((pemasukan − ditabungPerBulan − buffer) / 100.000) × 100.000)
+```
+
 Setelah kamu klik **"Terapkan Solusi"**, angka-angka itu langsung dipakai ulang
 untuk menghitung, dan kamu bisa lihat hasilnya seketika.
 
@@ -165,6 +212,27 @@ Contoh gambaran (versi ringkas):
 | Lebih dari 5 tahun | hati-hati | obligasi + emas + sedikit saham |
 | Lebih dari 5 tahun | berani | mayoritas saham |
 
+**Rumus & tabel aslinya:**
+
+```
+Kelompok jangka waktu (dalam bulan):
+  < 24 bulan        → "<2"   (profil risiko diabaikan)
+  24–60 bulan       → "2-5"
+  > 60 bulan        → ">5"
+```
+
+Lalu dipetakan ke matriks berikut (angka = porsi dana):
+
+| Jangka waktu | Profil risiko | Komposisi | Asumsi tumbuh/tahun |
+|---|---|---|---|
+| < 2 tahun | semua | 100% RDPU | 4,75% |
+| 2–5 tahun | Konservatif | 70% RDPU + 30% SBN/Deposito | 5,5% |
+| 2–5 tahun | Moderat | 50% RDPU + 50% Emas/SBN Ritel | 6,5% |
+| 2–5 tahun | Agresif | 30% RDPU + 40% SBN/RDPT + 30% Emas | 7,5% |
+| > 5 tahun | Konservatif | 50% SBN/RDPT + 30% Emas + 20% Saham | 7,0% |
+| > 5 tahun | Moderat | 40% Saham/Indeks + 40% SBN + 20% Emas | 9,5% |
+| > 5 tahun | Agresif | 70% Saham/Indeks + 20% SBN + 10% Emas | 11,0% |
+
 ---
 
 ## 5. Investasi — "Berapa nabung per bulan?"
@@ -182,18 +250,29 @@ Setoran bulanan = (target − tabungan awal yang ikut tumbuh) ÷ faktor pertumbu
 Kamu tidak perlu menghitung "faktor pertumbuhan" itu — aplikasi yang
 menghitungnya. Yang penting memahami hasilnya:
 
-Contoh: target `Rp 100.000.000`, tabungan awal `Rp 10.000.000`, 60 bulan, dan
+Contoh: target `Rp 100.000.000`, tabungan awal `Rp 20.000.000`, 60 bulan, dan
 asumsi tumbuh `6,5% per tahun`:
 
 | Cara | Setoran per bulan |
 |---|---|
-| Tanpa tumbuh (dibagi rata saja) | Rp 1.500.000 |
-| Dengan tumbuh 6,5% per tahun | **± Rp 1.220.000** |
+| Tanpa tumbuh (dibagi rata saja) | Rp 1.333.333 |
+| Dengan tumbuh 6,5% per tahun | **± Rp 1.024.000** |
 
-Selisihnya (Rp 280.000/bulan) adalah "bantuan" dari hasil investasi itu sendiri.
+Selisihnya (Rp 310.000/bulan) adalah "bantuan" dari hasil investasi itu sendiri.
 
 Kalau asumsi tumbuhnya nol, aplikasi otomatis memakai cara sederhana:
 `(target − tabungan) ÷ jumlah bulan`.
+
+**Rumus aslinya (Future Value of Annuity):**
+
+```text
+i = asumsi tumbuh per tahun / 12      (tumbuh per bulan)
+n = jumlah bulan
+
+Jika i = 0 :  setoran = (target − tabungan) / n
+Jika i > 0 :  setoran = (target − tabungan × (1+i)^n) × i / ((1+i)^n − 1)
+setoran    = max(0, setoran)
+```
 
 > Catatan jujur: angka tumbuh (`6,5%`, `9,5%`, dst.) hanyalah **asumsi**. Hasil
 > nyata bisa berbeda — bisa lebih tinggi, bisa lebih rendah.
@@ -216,6 +295,16 @@ Lalu:
 | 5–8 | **Konservatif** (hati-hati) |
 | 9–12 | **Moderat** (seimbang) |
 | 13–15 | **Agresif** (berani) |
+
+**Rumus aslinya:**
+
+```text
+skor = jawaban1 + jawaban2 + jawaban3 + jawaban4 + jawaban5
+
+skor ≤ 8            → "Konservatif"
+9 ≤ skor ≤ 12       → "Moderat"
+skor ≥ 13           → "Agresif"
+```
 
 Profil inilah yang dipakai di bagian 4 untuk memilih campuran investasi.
 
