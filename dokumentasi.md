@@ -214,6 +214,7 @@ Semua logika investasi berada di `lib/investment/*` sebagai **pure function** ya
 | Dokumen | Isi |
 |---|---|
 | `dokumentasi.md` (ini) | Arah produk keseluruhan (otoritatif). |
+| `RUMUS.md` | Kumpulan rumus perhitungan seluruh modul (`lib/investment`, `lib/planner`, `lib/financial`, `lib/format`) + validasi API. |
 | `.kiro/specs/financial-planner/requirements.md` | Kebutuhan formal MVP cakupan Investasi (EARS). |
 | `.kiro/specs/financial-planner/design.md` | Desain teknis Investasi: matriks, properti korektnes, testing. |
 | `.kiro/specs/financial-planner/tasks.md` | Rencana implementasi Investasi (10 langkah, selesai). |
