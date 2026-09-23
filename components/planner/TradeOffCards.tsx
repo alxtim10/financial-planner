@@ -19,20 +19,20 @@ const TYPE_CONFIG: Record<
 > = {
   EXTEND_HORIZON: {
     icon: CalendarClock,
-    badgeBg: "bg-blue-50 dark:bg-blue-950/40",
-    badgeText: "text-blue-700 dark:text-blue-300",
+    badgeBg: "bg-blue-50",
+    badgeText: "text-blue-700",
     borderAccent: "hover:border-blue-500/50",
   },
   REDUCE_TARGET: {
     icon: Target,
-    badgeBg: "bg-emerald-50 dark:bg-emerald-950/40",
-    badgeText: "text-emerald-700 dark:text-emerald-300",
+    badgeBg: "bg-emerald-50",
+    badgeText: "text-emerald-700",
     borderAccent: "hover:border-emerald-500/50",
   },
   REDUCE_WANTS: {
     icon: Scissors,
-    badgeBg: "bg-amber-50 dark:bg-amber-950/40",
-    badgeText: "text-amber-700 dark:text-amber-300",
+    badgeBg: "bg-amber-50",
+    badgeText: "text-amber-700",
     borderAccent: "hover:border-amber-500/50",
   },
 };

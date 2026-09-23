@@ -33,21 +33,21 @@ const TIER_CONFIG: Record<
     icon: AlertCircle,
     label: "Perlu perhatian",
     badge:
-      "border-red-200 bg-red-50 text-red-700 dark:border-red-800/50 dark:bg-red-950/40 dark:text-red-400",
+      "border-red-200 bg-red-50 text-red-700",
     bar: "bg-red-500",
   },
   ADEQUATE: {
     icon: ShieldAlert,
     label: "Memadai",
     badge:
-      "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/40 dark:text-amber-400",
+      "border-amber-200 bg-amber-50 text-amber-700",
     bar: "bg-amber-500",
   },
   STRONG: {
     icon: ShieldCheck,
     label: "Kuat",
     badge:
-      "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-400",
+      "border-emerald-200 bg-emerald-50 text-emerald-700",
     bar: "bg-emerald-500",
   },
 };
@@ -157,9 +157,9 @@ export default function EmergencyFundCard({
             <div className="flex flex-col gap-1.5">
               <div className="relative">
                 <div className="flex h-2 overflow-hidden rounded-full">
-                  <div className="w-1/3 bg-red-300 dark:bg-red-900/50" />
-                  <div className="w-1/3 bg-amber-300 dark:bg-amber-900/50" />
-                  <div className="w-1/3 bg-emerald-300 dark:bg-emerald-900/50" />
+                  <div className="w-1/3 bg-red-300" />
+                  <div className="w-1/3 bg-amber-300" />
+                  <div className="w-1/3 bg-emerald-300" />
                 </div>
                 <span
                   aria-hidden
