@@ -6,7 +6,7 @@ bahasa sehari-hari dan contoh nyata. Tidak perlu latar belakang matematika.
 > Semua angka dihitung dari **3 data** yang kamu isi — pemasukan, pengeluaran,
 > dan tabungan — ditambah **tujuan** (target dana & jangka waktu). Aplikasi tidak
 > menebak dan tidak menyimpan angka rahasia. Tiap bagian menyertakan **rumus
-> aslinya**; untuk versi teknis lengkap (sampai lokasi kode), lihat
+> teori** (dengan variabel); untuk detail teknis sampai lokasi kode, lihat
 > [`RUMUS.md`](./RUMUS.md).
 
 Contoh yang dipakai di seluruh dokumen ini (biar konsisten):
@@ -17,6 +17,26 @@ Contoh yang dipakai di seluruh dokumen ini (biar konsisten):
 | Pengeluaran per bulan | Rp 6.000.000 |
 | Tabungan saat ini | Rp 20.000.000 |
 | Tujuan | Rp 100.000.000 dalam 60 bulan (5 tahun) |
+
+### Simbol yang dipakai
+
+| Simbol | Arti |
+|---|---|
+| `M` | Pemasukan bulanan (monthly income) |
+| `E` | Pengeluaran bulanan (expense) |
+| `S` | Tabungan saat ini (current savings) |
+| `G` | Target dana / goal (goal amount) |
+| `n` | Jangka waktu dalam bulan (horizon) |
+| `r` | Asumsi return tahunan, desimal (mis. `0,065`) |
+| `i` | Return per bulan = `r / 12` |
+| `FV` | Nilai akhir yang dituju (future value) |
+| `PV` | Nilai awal / tabungan awal (present value) |
+| `PMT` | Setoran bulanan (payment per month) |
+| `D` | Ditabung per bulan |
+| `B` | Kebutuhan per bulan |
+| `W` | Keinginan per bulan |
+| `C` | Kesiapan dana darurat (bulan / coverage) |
+| `T` | Target dana darurat |
 
 ---
 
@@ -43,17 +63,17 @@ Kekurangan          = target − tabungan   (0 kalau sudah cukup)
 Contoh: `Rp 6.000.000 × 6 = Rp 36.000.000`, lalu `Rp 36.000.000 − Rp 20.000.000
 = Rp 16.000.000` (masih kurang).
 
-**Rumus aslinya:**
+**Rumus teori** (lihat [daftar simbol](#simbol-yang-dipakai)):
 
 ```text
-coverage        = tabungan / pengeluaran
-targetAmount    = pengeluaran × 6
-shortfallAmount = max(0, targetAmount − tabungan)
-coverageMonths  = coverage dibulatkan 1 desimal
+C = S / E
+T = E × 6
+Kekurangan = max(0, T − S)
+C ditampilkan dibulatkan 1 desimal
 
-coverage < 3        → VULNERABLE  (Perlu perhatian)
-3 ≤ coverage ≤ 6    → ADEQUATE    (Memadai)
-coverage > 6        → STRONG      (Kuat)
+C < 3        → VULNERABLE  (Perlu perhatian)
+3 ≤ C ≤ 6    → ADEQUATE    (Memadai)
+C > 6        → STRONG      (Kuat)
 ```
 
 **Arti warnanya:**
@@ -101,23 +121,23 @@ Persentase tiap pos = pos ÷ pemasukan × 100%
 
 Contoh: Ditabung 13,3% · Kebutuhan 60% · Keinginan 26,7%.
 
-**Rumus aslinya:**
+**Rumus teori** (lihat [daftar simbol](#simbol-yang-dipakai)):
 
 ```text
-ditabung  = max(0, target − tabungan) / jumlah bulan
-kebutuhan = pengeluaran > 0 ? pengeluaran : round(0,65 × (pemasukan − ditabung))
-keinginan = pemasukan − ditabung − kebutuhan
-posPct    = pos / pemasukan × 100%
+D = max(0, G − S) / n
+B = (E > 0) ? E : round(0,65 × (M − D))
+W = M − D − B
+Pct_D = D / M × 100% ;  Pct_B = B / M × 100% ;  Pct_W = W / M × 100%
 
-sudahTercapai = tabungan ≥ target
+sudahTercapai = (S ≥ G)
 ```
 
 Statusnya:
 
 ```text
-tidak realistis  iff  ditabung > pemasukan
-selain itu, layak = (ditabung + kebutuhan ≤ pemasukan)
-sehat            iff  layak DAN keinginan ≥ 0,05 × pemasukan
+tidak realistis  iff  D > M
+layak            = (D + B ≤ M)
+sehat            iff  layak DAN W ≥ 0,05 × M
                          selain itu → "ketat"
 ```
 
@@ -172,17 +192,15 @@ menekannya sampai kira-kira **35% pemasukan** agar target tetap bisa dikejar.
 Contoh: dari kebutuhan `Rp 6.000.000` → disarankan `Rp 3.500.000`, hemat
 `Rp 2.500.000` per bulan.
 
-**Rumus aslinya:**
+**Rumus teori** (lihat [daftar simbol](#simbol-yang-dipakai)):
 
 ```text
-buffer     = 0,05 × pemasukan
-kapasitas  = max(0, pemasukan − kebutuhan − buffer)
+buffer = 0,05 × M
+C_aman = max(0, M − B − buffer)
 
-Perpanjang waktu : bulanBaru  = ceil((target − tabungan) / kapasitas)
-Sesuaikan target : targetBaru = max(1.000.000,
-                                  floor((kapasitas × jumlahBulan + tabungan) / 500.000) × 500.000)
-Pangkas belanja  : batasPengeluaran = max(0,35 × pemasukan,
-                                  floor((pemasukan − ditabungPerBulan − buffer) / 100.000) × 100.000)
+Perpanjang waktu : n' = ceil((G − S) / C_aman)
+Sesuaikan target : G' = max(1.000.000, floor((C_aman × n + S) / 500.000) × 500.000)
+Pangkas belanja  : E' = max(0,35 × M, floor((M − D − buffer) / 100.000) × 100.000)
 ```
 
 Setelah kamu klik **"Terapkan Solusi"**, angka-angka itu langsung dipakai ulang
@@ -212,13 +230,14 @@ Contoh gambaran (versi ringkas):
 | Lebih dari 5 tahun | hati-hati | obligasi + emas + sedikit saham |
 | Lebih dari 5 tahun | berani | mayoritas saham |
 
-**Rumus & tabel aslinya:**
+**Rumus teori & tabel aslinya** (lihat [daftar simbol](#simbol-yang-dipakai)):
 
-```
-Kelompok jangka waktu (dalam bulan):
-  < 24 bulan        → "<2"   (profil risiko diabaikan)
-  24–60 bulan       → "2-5"
-  > 60 bulan        → ">5"
+```text
+bucket(n):  n < 24        → "<2"   (profil risiko diabaikan)
+            24 ≤ n ≤ 60   → "2-5"
+            n > 60        → ">5"
+
+Komposisi = Matriks[bucket(n)][profil]
 ```
 
 Lalu dipetakan ke matriks berikut (angka = porsi dana):
@@ -263,15 +282,18 @@ Selisihnya (Rp 310.000/bulan) adalah "bantuan" dari hasil investasi itu sendiri.
 Kalau asumsi tumbuhnya nol, aplikasi otomatis memakai cara sederhana:
 `(target − tabungan) ÷ jumlah bulan`.
 
-**Rumus aslinya (Future Value of Annuity):**
+**Rumus teori — Future Value of Annuity** (lihat [daftar simbol](#simbol-yang-dipakai)):
 
 ```text
-i = asumsi tumbuh per tahun / 12      (tumbuh per bulan)
-n = jumlah bulan
+i  = r / 12          (return bulanan)
+n  = jumlah bulan
+PV = S               (tabungan awal)
+FV = G               (target dana)
 
-Jika i = 0 :  setoran = (target − tabungan) / n
-Jika i > 0 :  setoran = (target − tabungan × (1+i)^n) × i / ((1+i)^n − 1)
-setoran    = max(0, setoran)
+Jika i = 0 :  PMT = (FV − PV) / n
+Jika i > 0 :  PMT = (FV − PV · (1+i)^n) · i / ((1+i)^n − 1)
+
+PMT = max(0, PMT)
 ```
 
 > Catatan jujur: angka tumbuh (`6,5%`, `9,5%`, dst.) hanyalah **asumsi**. Hasil
@@ -296,14 +318,14 @@ Lalu:
 | 9–12 | **Moderat** (seimbang) |
 | 13–15 | **Agresif** (berani) |
 
-**Rumus aslinya:**
+**Rumus teori** (lihat [daftar simbol](#simbol-yang-dipakai)):
 
 ```text
-skor = jawaban1 + jawaban2 + jawaban3 + jawaban4 + jawaban5
+score = a₁ + a₂ + a₃ + a₄ + a₅      (aₖ = nilai jawaban ke-k, 1..3)
 
-skor ≤ 8            → "Konservatif"
-9 ≤ skor ≤ 12       → "Moderat"
-skor ≥ 13           → "Agresif"
+score ≤ 8            → "Konservatif"
+9 ≤ score ≤ 12       → "Moderat"
+score ≥ 13           → "Agresif"
 ```
 
 Profil inilah yang dipakai di bagian 4 untuk memilih campuran investasi.
