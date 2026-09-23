@@ -7,6 +7,7 @@ describe("evaluateEmergencyFund", () => {
     expect(result.tier).toBe("VULNERABLE");
     expect(result.coverageMonths).toBe(2.1);
     expect(result.targetMonths).toBe(6);
+    expect(result.targetAmount).toBe(42_000_000); // 7jt*6
     expect(result.shortfallAmount).toBe(27_000_000); // 7jt*6 - 15jt
     expect(result.advisoryMessage).toContain("bawah 3 bulan");
   });
@@ -15,6 +16,7 @@ describe("evaluateEmergencyFund", () => {
     const result = evaluateEmergencyFund(30_000_000, 7_000_000); // ~4.29 bulan
     expect(result.tier).toBe("ADEQUATE");
     expect(result.coverageMonths).toBe(4.3);
+    expect(result.targetAmount).toBe(42_000_000);
     expect(result.shortfallAmount).toBe(12_000_000);
   });
 
@@ -22,6 +24,7 @@ describe("evaluateEmergencyFund", () => {
     const result = evaluateEmergencyFund(49_000_000, 7_000_000); // 7.0 bulan
     expect(result.tier).toBe("STRONG");
     expect(result.coverageMonths).toBe(7);
+    expect(result.targetAmount).toBe(42_000_000);
     expect(result.shortfallAmount).toBe(0);
   });
 
@@ -41,6 +44,7 @@ describe("evaluateEmergencyFund", () => {
       const result = evaluateEmergencyFund(10_000_000, expense);
       expect(result.tier).toBe("ADEQUATE");
       expect(result.coverageMonths).toBe(0);
+      expect(result.targetAmount).toBe(0);
       expect(result.shortfallAmount).toBe(0);
       expect(result.advisoryMessage).toContain("Belum ada data pengeluaran");
     }
@@ -50,6 +54,7 @@ describe("evaluateEmergencyFund", () => {
     const result = evaluateEmergencyFund(-5_000_000, 5_000_000);
     expect(result.coverageMonths).toBe(0);
     expect(result.tier).toBe("VULNERABLE");
+    expect(result.targetAmount).toBe(30_000_000);
     expect(result.shortfallAmount).toBe(30_000_000);
   });
 });

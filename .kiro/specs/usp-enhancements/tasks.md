@@ -48,7 +48,7 @@ Rencana implementasi ini mengeksekusi fitur pembeda utama (**Unique Selling Poin
     - _Requirements: 2.1, 2.3_
 
 - [x] 8. UI Indikator Dana Darurat (Emergency Fund Badge)
-  - [x] 8.1 Buat komponen `components/profile/EmergencyFundCard.tsx` dengan visual tier warna (`VULNERABLE` merah, `ADEQUATE` amber, `STRONG` hijau), progres terhadap target 6 bulan, kekurangan nominal, dan saran edukatif.
+  - [x] 8.1 Buat komponen `components/profile/EmergencyFundCard.tsx` dengan visual tier warna (`VULNERABLE` merah, `ADEQUATE` amber, `STRONG` hijau), progres terhadap target 6 bulan, rincian perhitungan ("dari mana angka ini"), skala tier + penanda posisi, kekurangan nominal, dan saran edukatif (penjelasan "kenapa" collapsible).
     - _Requirements: 3.1_
   - [x] 8.2 Tampilkan kartu kesiapan dana darurat pada Dashboard utama (`app/page.tsx`) dan halaman Profil Finansial (`app/profile/page.tsx`).
     - _Requirements: 3.1_

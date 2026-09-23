@@ -34,6 +34,8 @@ export interface EmergencyFundAnalysis {
   tier: EmergencyFundTier;
   /** Target bulan pengeluaran ideal (standar 6 bulan). */
   targetMonths: number;
+  /** Nominal dana darurat ideal = pengeluaran bulanan × target bulan. */
+  targetAmount: number;
   /** Kekurangan nominal untuk mencapai target dana darurat (0 bila sudah cukup). */
   shortfallAmount: number;
   advisoryMessage: string;

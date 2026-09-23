@@ -110,8 +110,8 @@ export default function ProfileForm() {
 
       if (res.status === 201) {
         setSuccess(true);
-        // Beri jeda singkat agar umpan balik sukses terlihat, lalu lanjut.
-        router.push("/investment");
+        // Beri jeda singkat agar umpan balik sukses terlihat, lalu kembali ke dashboard.
+        router.push("/");
         return;
       }
 
@@ -220,7 +220,7 @@ export default function ProfileForm() {
             Menyimpan...
           </>
         ) : (
-          "Simpan & lanjut ke Investasi"
+          "Simpan profil"
         )}
       </button>
     </form>

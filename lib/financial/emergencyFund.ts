@@ -39,6 +39,7 @@ export function evaluateEmergencyFund(
       coverageMonths: 0,
       tier: "ADEQUATE",
       targetMonths: TARGET_MONTHS,
+      targetAmount: 0,
       shortfallAmount: 0,
       advisoryMessage: "Belum ada data pengeluaran bulanan yang tercatat.",
     };
@@ -64,6 +65,7 @@ export function evaluateEmergencyFund(
     coverageMonths: Number(coverage.toFixed(1)),
     tier,
     targetMonths: TARGET_MONTHS,
+    targetAmount: Math.round(targetAmount),
     shortfallAmount: Math.round(shortfall),
     advisoryMessage: ADVISORY[tier],
   };

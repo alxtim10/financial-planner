@@ -40,6 +40,11 @@ export async function getFinancialTwinContext(): Promise<string> {
       lines.push(`  - Pengeluaran Bulanan: ${fmt(profile.expense)}`);
       lines.push(`  - Tabungan Saat Ini: ${fmt(profile.currentSavings)}`);
       lines.push(`  - Rasio Kesiapan Dana Darurat: ${emergency.coverageMonths} bulan pengeluaran (${emergency.tier})`);
+      if (emergency.targetAmount > 0) {
+        lines.push(
+          `    Target ideal ${emergency.targetMonths} bulan = ${fmt(emergency.targetAmount)}${emergency.shortfallAmount > 0 ? ` (kekurangan ${fmt(emergency.shortfallAmount)})` : " (sudah terpenuhi)"}`,
+        );
+      }
     } else {
       lines.push(`• **Profil Finansial**: Belum diisi.`);
     }
