@@ -197,17 +197,11 @@ export default function ChatInterface() {
           <h1 className="text-[0.95rem] font-medium tracking-tight text-foreground">
             TabungOne
           </h1>
-          {contextSynced && promptContext.hasProfile && (
-            <span className="ml-auto flex items-center gap-1.5 rounded-full border border-emerald-200/60 bg-emerald-50/80 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-              Data finansial terhubung
-            </span>
-          )}
         </div>
       </header>
 
       {/* Area pesan */}
-      <main className="scroll-area flex-1 overflow-y-auto">
+      <main className="scroll-area flex-1 overflow-y-auto overscroll-contain">
         <div className="mx-auto w-full max-w-3xl px-4 py-8">
           {isEmpty ? (
             <EmptyState onPick={handleSend} disabled={isGenerating} context={promptContext} />
