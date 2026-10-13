@@ -7,7 +7,7 @@ app/
   api/
     profile/route.ts         # POST/GET Financial_Profile
     goal/route.ts            # POST/GET Goal (Tujuan Aktif); horizonMonths
-    recommendation/route.ts  # POST rekomendasi investasi (rule-based)
+    recommendation/route.ts  # POST rekomendasi investasi (rule-based) + selectedInstruments opsional
     budget/route.ts          # GET konteks Planner + prefill goal; POST hitung+simpan (+ trade-offs bila tak layak)
     chat/route.ts            # streaming Gemini + inject Financial Twin (getFinancialTwinContext)
   page.tsx                   # dashboard (server): profil + ActiveGoalCard + CTA + nav
@@ -28,7 +28,7 @@ lib/
   prompt.ts            # system prompt chatbot
   ai/                  financialContext.ts — getFinancialTwinContext() (konteks chat data-aware)
   financial/           emergencyFund.ts (pure) + emergencyFund.test.ts
-  investment/          allocation.ts, projection.ts, riskScoring.ts  (pure)
+  investment/          allocation.ts (+ applyInstrumentPreference, pure+test), projection.ts, riskScoring.ts  (pure)
   planner/             goalBudget.ts + tradeoffs.ts (AKTIF, pure) ; presets.ts/budget.ts/savingsProjection.ts (PENSIUN)
   format/rupiahInput.ts
 types/                 finance.ts, planner.ts, chat.ts, usp.ts (dana darurat + trade-off + Financial Twin)
@@ -45,7 +45,7 @@ prisma/                schema.prisma + migrations/
 ## Alur data inti
 
 - Dashboard (`app/page.tsx`, server) baca `getLatestProfile()` + `getActiveGoal()` → render + `EmergencyFundCard` (evaluasi dana darurat dari profil).
-- Investasi: `InvestmentWizard` fetch `GET /api/goal` (prefill) → `GoalForm` → `RiskSurvey` → `POST /api/recommendation` (`getAllocation` + `calculateMonthlyContribution`) → `RecommendationCard`.
+- Investasi: `InvestmentWizard` fetch `GET /api/goal` (prefill) → `GoalForm` → `RiskSurvey` (5 pertanyaan risiko + 1 pertanyaan instrumen opsional) → `POST /api/recommendation` (`getAllocation` → `applyInstrumentPreference` → `calculateMonthlyContribution`) → `RecommendationCard`. Pilihan instrumen kosong = sistem menentukan; ada pilihan = komposisi difilter+dinormalisasi ke instrumen terpilih.
 - Planner: `PlannerWizard` fetch `GET /api/budget` (prefill dari Tujuan Aktif) → `BudgetForm` → `POST /api/budget` (`computeGoalBudget`) → `BudgetResultCard`. Bila `feasibility.severity !== "ok"`, API ikut mengisi `tradeOffs` (`computeTradeOffs`) → `TradeOffCards` (terapkan satu klik, override form).
 - Chat: `ChatInterface` → `POST /api/chat` → `getFinancialTwinContext()` merangkai data pengguna terkini (profil, goal, risiko, rekomendasi, budget, dana darurat) ke `systemInstruction` Gemini.
 - Goal dibuat **hanya** dari dashboard (`GoalEditor` → `POST /api/goal`). Investasi/Planner hanya prefill + override satu kali (tidak buat Goal baru).

@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { scoreRisk } from "@/lib/investment/riskScoring";
-import { getAllocation } from "@/lib/investment/allocation";
+import {
+  getAllocation,
+  applyInstrumentPreference,
+  isInstrumentCategory,
+} from "@/lib/investment/allocation";
 import { calculateMonthlyContribution } from "@/lib/investment/projection";
 
 export const runtime = "nodejs";
@@ -12,6 +16,7 @@ interface RecommendationBody {
   targetAmount?: unknown;
   horizonMonths?: unknown;
   riskAnswers?: unknown;
+  selectedInstruments?: unknown;
   currentSavings?: unknown;
   userId?: string | null;
 }
@@ -40,8 +45,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Permintaan tidak valid." }, { status: 400 });
   }
 
-  const { goalId, targetAmount, horizonMonths, riskAnswers, currentSavings, userId = null } =
-    body ?? {};
+  const {
+    goalId,
+    targetAmount,
+    horizonMonths,
+    riskAnswers,
+    selectedInstruments,
+    currentSavings,
+    userId = null,
+  } = body ?? {};
 
   // 1. Validasi input.
   if (typeof targetAmount !== "number" || !Number.isFinite(targetAmount) || targetAmount <= 0) {
@@ -81,7 +93,24 @@ export async function POST(req: Request) {
     );
   }
 
+  // selectedInstruments opsional: bila dikirim wajib array string kategori valid.
+  // Nilai tak dikenal diabaikan di engine; di sini kita hanya menolak tipe yang
+  // jelas salah (bukan array) agar kontrak klien tegas.
+  if (
+    selectedInstruments !== undefined &&
+    selectedInstruments !== null &&
+    !Array.isArray(selectedInstruments)
+  ) {
+    return NextResponse.json(
+      { error: "Pilihan instrumen harus berupa daftar." },
+      { status: 400 },
+    );
+  }
+
   const answers = riskAnswers as number[];
+  const chosenInstruments = Array.isArray(selectedInstruments)
+    ? (selectedInstruments.filter(isInstrumentCategory) as string[])
+    : [];
   const goalIdValue = typeof goalId === "string" ? goalId : null;
 
   // 2–4. Mesin investasi (pure functions). Error input → 400.
@@ -95,7 +124,10 @@ export async function POST(req: Request) {
     score = risk.score;
     profile = risk.profile;
 
-    const allocation = getAllocation(horizonMonths, risk.profile);
+    const baseAllocation = getAllocation(horizonMonths, risk.profile);
+    // Terapkan preferensi instrumen pengguna (opsional). Kosong → sistem yang
+    // menentukan (passthrough); ada pilihan → filter + normalisasi deterministik.
+    const allocation = applyInstrumentPreference(baseAllocation, chosenInstruments);
     composition = allocation.composition;
     annualReturn = allocation.annualReturn;
 
