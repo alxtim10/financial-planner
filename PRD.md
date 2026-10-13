@@ -1,4 +1,4 @@
-# Product Requirement Document (PRD): TabungOne (Financial Planner)
+# Product Requirement Document (PRD): Tabungin (Financial Planner)
 
 > **Dokumen Terkait:** Dokumen arah produk lengkap yang otoritatif dapat dilihat pada [`dokumentasi.md`](./dokumentasi.md), dengan spesifikasi formal per modul pada folder [`.kiro/specs/`](./.kiro/specs/).
 
@@ -6,7 +6,7 @@
 
 ## 1. Overview & Objectives
 
-**TabungOne** adalah aplikasi web perencana keuangan personal terstruktur berbasis Next.js App Router. Aplikasi ini membimbing pengguna memahami kondisi keuangan mereka, menetapkan tujuan finansial, memperoleh rekomendasi alokasi investasi berbasis aturan (*rule-based*), menyusun perencanaan anggaran bulanan yang digerakkan oleh tujuan (*goal-driven*), serta berkonsultasi secara interaktif melalui asisten AI (Gemini).
+**Tabungin** adalah aplikasi web perencana keuangan personal terstruktur berbasis Next.js App Router. Aplikasi ini membimbing pengguna memahami kondisi keuangan mereka, menetapkan tujuan finansial, memperoleh rekomendasi alokasi investasi berbasis aturan (*rule-based*), menyusun perencanaan anggaran bulanan yang digerakkan oleh tujuan (*goal-driven*), serta berkonsultasi secara interaktif melalui asisten AI (Gemini).
 
 - **Target Audiens:** Individu yang ingin merencanakan keuangan personal secara praktis, terstruktur, dan edukatif, baik pemula maupun yang ingin mensimulasikan pencapaian target dana tertentu.
 - **Tujuan Produk:**

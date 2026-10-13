@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TabungOne",
+  title: "Tabungin",
   description: "Asisten perencana keuangan pribadi berbasis AI (PoC)",
 };
 

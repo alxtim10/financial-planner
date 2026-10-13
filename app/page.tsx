@@ -22,7 +22,7 @@ import EmergencyFundCard from "@/components/profile/EmergencyFundCard";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "TabungOne — Perencana Keuangan",
+  title: "Tabungin — Perencana Keuangan",
   description:
     "Perencana keuangan pribadi: mulai dari profil finansial, tetapkan tujuan, dan dapatkan rekomendasi alokasi investasi.",
 };
@@ -57,7 +57,7 @@ export default async function Home() {
             Perencana keuangan
           </span>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            TabungOne
+            Tabungin
           </h1>
           <p className="text-[0.9375rem] leading-relaxed text-muted">
             Rencanakan keuangan Anda secara terstruktur: mulai dari profil

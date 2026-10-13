@@ -191,7 +191,7 @@ export default function ChatInterface() {
             <Sparkles className="h-4 w-4 text-white" />
           </div>
           <h1 className="text-[0.95rem] font-medium tracking-tight text-foreground">
-            TabungOne
+            Tabungin
           </h1>
         </div>
       </header>

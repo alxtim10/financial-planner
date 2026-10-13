@@ -9,7 +9,7 @@ import { getLatestProfile } from "@/lib/profileGate";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Profil Finansial — TabungOne",
+  title: "Profil Finansial — Tabungin",
   description: "Isi profil finansial dasar sebelum memulai perencanaan investasi.",
 };
 

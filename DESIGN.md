@@ -1,4 +1,4 @@
-# System Design & Architecture: TabungOne (Financial Planner)
+# System Design & Architecture: Tabungin (Financial Planner)
 
 > **Dokumen Terkait:** Dokumen arah produk lengkap yang otoritatif dapat dilihat pada [`dokumentasi.md`](./dokumentasi.md), dengan spesifikasi formal per modul pada folder [`.kiro/specs/`](./.kiro/specs/).
 

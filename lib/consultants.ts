@@ -72,11 +72,11 @@ export function buildContactHref(contact: ConsultantContact): string {
   switch (contact.method) {
     case "whatsapp": {
       const sapaan =
-        "Halo, saya menemukan Anda lewat TabungOne dan ingin berkonsultasi soal perencanaan keuangan.";
+        "Halo, saya menemukan Anda lewat Tabungin dan ingin berkonsultasi soal perencanaan keuangan.";
       return `https://wa.me/${contact.value}?text=${encodeURIComponent(sapaan)}`;
     }
     case "email": {
-      const subjek = "Konsultasi keuangan via TabungOne";
+      const subjek = "Konsultasi keuangan via Tabungin";
       return `mailto:${contact.value}?subject=${encodeURIComponent(subjek)}`;
     }
     case "phone":
