@@ -7,7 +7,11 @@ import {
   applyInstrumentPreference,
   isInstrumentCategory,
 } from "@/lib/investment/allocation";
-import { calculateMonthlyContribution } from "@/lib/investment/projection";
+import {
+  calculateMonthlyContribution,
+  projectInvestment,
+} from "@/lib/investment/projection";
+import type { AllocationSlice, InvestmentProjection } from "@/types/finance";
 
 export const runtime = "nodejs";
 
@@ -116,9 +120,10 @@ export async function POST(req: Request) {
   // 2–4. Mesin investasi (pure functions). Error input → 400.
   let profile: string;
   let score: number;
-  let composition: unknown;
+  let composition: AllocationSlice[];
   let annualReturn: number;
   let monthlyContribution: number;
+  let projection: InvestmentProjection;
   try {
     const risk = scoreRisk(answers);
     score = risk.score;
@@ -136,6 +141,16 @@ export async function POST(req: Request) {
       presentValue: currentSavings,
       annualReturn: allocation.annualReturn,
       horizonMonths,
+    });
+
+    // Proyeksi detail (deterministik): FV, total modal disetor, pertumbuhan,
+    // dan breakdown setoran + return per instrumen.
+    projection = projectInvestment({
+      presentValue: currentSavings,
+      monthlyContribution,
+      annualReturn: allocation.annualReturn,
+      horizonMonths,
+      composition: allocation.composition,
     });
   } catch (err) {
     console.error("[recommendation] input mesin investasi tidak valid:", err);
@@ -161,7 +176,7 @@ export async function POST(req: Request) {
         userId,
         goalId: goalIdValue,
         riskProfile: profile,
-        composition: composition as Prisma.InputJsonValue,
+        composition: composition as unknown as Prisma.InputJsonValue,
         annualReturn,
         monthlyContribution,
       },
@@ -174,9 +189,9 @@ export async function POST(req: Request) {
     );
   }
 
-  // 6. Sukses.
+  // 6. Sukses. Field lama tetap ada (backward-compatible) + `projection` detail.
   return NextResponse.json(
-    { riskProfile: profile, composition, annualReturn, monthlyContribution },
+    { riskProfile: profile, composition, annualReturn, monthlyContribution, projection },
     { status: 200 },
   );
 }

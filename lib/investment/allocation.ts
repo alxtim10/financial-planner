@@ -181,10 +181,11 @@ export const INSTRUMENT_CATEGORIES = [
 export type InstrumentCategory = (typeof INSTRUMENT_CATEGORIES)[number];
 
 /**
- * Return tahunan default per kategori (desimal). Dipakai hanya sebagai fallback
- * untuk kategori yang dipilih pengguna TETAPI tidak muncul di komposisi matriks
- * kombinasi (horizon × profil) saat ini. Nilai konservatif, selaras rentang
- * return pada ALLOCATION_MATRIX.
+ * Return tahunan per kategori instrumen (desimal). Sumber tunggal untuk:
+ * (a) fallback return kategori pilihan pengguna yang tak muncul di matriks pada
+ *     kombinasi (horizon × profil) saat ini, dan
+ * (b) estimasi return per instrumen pada breakdown proyeksi detail.
+ * Nilai konservatif, selaras rentang return pada ALLOCATION_MATRIX.
  */
 const CATEGORY_DEFAULT_RETURN: Record<InstrumentCategory, number> = {
   RDPU: 0.0475,
@@ -193,6 +194,16 @@ const CATEGORY_DEFAULT_RETURN: Record<InstrumentCategory, number> = {
   "Saham/Indeks": 0.11,
   RDPT: 0.075,
 };
+
+/**
+ * Estimasi return tahunan (desimal) untuk sebuah label instrumen, dipetakan via
+ * kategori kanonik. Dipakai breakdown proyeksi per instrumen. Label tak dikenal
+ * → `fallback` (default: 0, pemanggil boleh menyuplai return alokasi gabungan).
+ */
+export function categoryReturn(instrument: string, fallback = 0): number {
+  const cat = instrumentToCategory(instrument);
+  return cat ? CATEGORY_DEFAULT_RETURN[cat] : fallback;
+}
 
 /**
  * Memetakan label instrumen (dari slice matriks) ke kategori kanonik via kata

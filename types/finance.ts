@@ -25,3 +25,23 @@ export interface ProjectionInput {
   annualReturn: number; // desimal
   horizonMonths: number; // jangka waktu dalam bulan
 }
+
+// Rincian proyeksi per instrumen (slice komposisi).
+export interface InstrumentProjection {
+  instrument: string; // nama/label instrumen (slice)
+  percentage: number; // 0..100, porsi dari komposisi
+  monthlyAmount: number; // Rupiah = monthlyContribution * percentage / 100
+  annualReturn: number; // desimal, estimasi return instrumen tsb
+}
+
+// Hasil proyeksi detail dari setoran bulanan yang sudah dihitung.
+export interface InvestmentProjection {
+  monthlyContribution: number; // echo PMT (Rupiah/bln)
+  horizonMonths: number; // jangka waktu (bulan)
+  annualReturn: number; // desimal, return gabungan portofolio
+  presentValue: number; // tabungan awal (PV)
+  futureValue: number; // nilai akhir terproyeksi (FV dari PV + anuitas PMT)
+  totalContributed: number; // PV + PMT*n (total modal yang disetor sendiri)
+  totalGrowth: number; // futureValue - totalContributed (hasil pertumbuhan)
+  perInstrument: InstrumentProjection[]; // breakdown per slice (porsi + return)
+}
