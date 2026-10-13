@@ -1,8 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { Info, TrendingUp, CalendarClock, PieChart, RotateCcw } from "lucide-react";
-import type { AllocationSlice, RiskProfile } from "@/types/finance";
+import {
+  Info,
+  TrendingUp,
+  CalendarClock,
+  PieChart,
+  RotateCcw,
+  Wallet,
+  Sprout,
+  Target,
+} from "lucide-react";
+import type {
+  AllocationSlice,
+  RiskProfile,
+  InvestmentProjection,
+} from "@/types/finance";
 
 /**
  * Penjelasan ringkas instrumen investasi untuk pengguna awam.
@@ -66,6 +79,8 @@ export interface InvestmentRecommendation {
   composition: AllocationSlice[];
   annualReturn: number; // desimal, mis. 0.095 → 9,5%
   monthlyContribution: number; // Rupiah
+  /** Proyeksi detail (opsional demi backward-compat bila API lama). */
+  projection?: InvestmentProjection;
 }
 
 interface RecommendationCardProps {
@@ -107,9 +122,15 @@ export default function RecommendationCard({
   recommendation,
   onRestart,
 }: RecommendationCardProps) {
-  const { riskProfile, composition, annualReturn, monthlyContribution } = recommendation;
+  const { riskProfile, composition, annualReturn, monthlyContribution, projection } =
+    recommendation;
   // Instrumen mana yang penjelasannya sedang dibuka (null = tidak ada).
   const [openInfo, setOpenInfo] = useState<string | null>(null);
+
+  // Peta porsi setoran bulanan + return per instrumen (bila proyeksi tersedia).
+  const perInstrumentMap = new Map(
+    (projection?.perInstrument ?? []).map((p) => [p.instrument, p]),
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -147,6 +168,55 @@ export default function RecommendationCard({
           </div>
         </div>
 
+        {/* Proyeksi detail: total terkumpul, modal disetor, hasil pertumbuhan */}
+        {projection && (
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-background px-4 py-4">
+            <span className="text-sm font-medium text-foreground">
+              Proyeksi di akhir jangka waktu
+            </span>
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+              <div className="flex flex-col gap-1 rounded-lg bg-accent-soft px-3.5 py-3">
+                <span className="flex items-center gap-1.5 text-xs text-muted">
+                  <Target className="h-3.5 w-3.5" />
+                  Total terkumpul
+                </span>
+                <span className="text-lg font-semibold text-foreground tabular-nums">
+                  {formatRupiah(projection.futureValue)}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1 rounded-lg bg-surface px-3.5 py-3">
+                <span className="flex items-center gap-1.5 text-xs text-muted">
+                  <Wallet className="h-3.5 w-3.5" />
+                  Modal Anda setor
+                </span>
+                <span className="text-lg font-semibold text-foreground tabular-nums">
+                  {formatRupiah(projection.totalContributed)}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1 rounded-lg bg-surface px-3.5 py-3">
+                <span className="flex items-center gap-1.5 text-xs text-muted">
+                  <Sprout className="h-3.5 w-3.5 text-emerald-500" />
+                  Hasil pertumbuhan
+                </span>
+                <span className="text-lg font-semibold text-emerald-600 tabular-nums dark:text-emerald-400">
+                  {formatRupiah(projection.totalGrowth)}
+                </span>
+              </div>
+            </div>
+            {projection.presentValue > 0 && (
+              <p className="text-xs leading-relaxed text-muted">
+                Termasuk tabungan awal{" "}
+                <span className="font-medium text-foreground">
+                  {formatRupiah(projection.presentValue)}
+                </span>{" "}
+                yang ikut diinvestasikan. Angka proyeksi memakai estimasi return{" "}
+                {formatPercent(projection.annualReturn)}/tahun dan belum
+                memperhitungkan pajak/biaya.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Komposisi alokasi */}
         <div className="flex flex-col gap-3">
           <span className="text-sm font-medium text-foreground">Komposisi alokasi</span>
@@ -170,12 +240,13 @@ export default function RecommendationCard({
             {composition.map((slice, i) => {
               const info = findInstrumentInfo(slice.instrument);
               const isOpen = openInfo === slice.instrument;
+              const detail = perInstrumentMap.get(slice.instrument);
               return (
                 <li key={slice.instrument} className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between gap-3 text-sm">
+                  <div className="flex items-start justify-between gap-3 text-sm">
                     <span className="flex min-w-0 items-center gap-2 text-foreground">
                       <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
                         style={{ backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }}
                       />
                       <span className="truncate">{slice.instrument}</span>
@@ -198,8 +269,16 @@ export default function RecommendationCard({
                         </button>
                       )}
                     </span>
-                    <span className="shrink-0 font-medium tabular-nums text-foreground">
-                      {slice.percentage}%
+                    <span className="flex shrink-0 flex-col items-end">
+                      <span className="font-medium tabular-nums text-foreground">
+                        {slice.percentage}%
+                      </span>
+                      {detail && (
+                        <span className="text-xs tabular-nums text-muted">
+                          {formatRupiah(detail.monthlyAmount)}/bln ·{" "}
+                          {formatPercent(detail.annualReturn)}/thn
+                        </span>
+                      )}
                     </span>
                   </div>
                   {info && isOpen && (
