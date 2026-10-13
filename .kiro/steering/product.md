@@ -16,6 +16,8 @@ Aplikasi web (Next.js App Router) untuk perencanaan keuangan personal terstruktu
 
 **Trade-Off Optimizer** = saat rencana Planner tidak layak (tight/impossible), sistem menawarkan ≤3 solusi alternatif (perpanjang jangka waktu / sesuaikan target / efisiensikan pengeluaran) yang bisa diterapkan satu klik ke form Planner.
 
+**Konsultan Keuangan (view-only)** = menu daftar konsultan (`/consultants`) dari data statis (`lib/consultants.ts`) + tombol "Hubungi" yang membuka kanal eksternal (WhatsApp/email/telepon). Tanpa DB, tanpa booking, tanpa Profile_Gate — murni informatif. Data saat ini placeholder.
+
 ## Status fitur (sudah jadi)
 
 - ✅ Profil Finansial (CRUD dasar via `/api/profile`)
@@ -25,6 +27,7 @@ Aplikasi web (Next.js App Router) untuk perencanaan keuangan personal terstruktu
 - ✅ Chatbot drawer **data-aware** (Financial Twin — konteks data pengguna sudah terintegrasi)
 - ✅ Indikator Dana Darurat (dashboard + Profil Finansial)
 - ✅ Trade-Off Optimizer di Planner (saran saat rencana tidak layak)
+- ✅ Daftar Konsultan Keuangan (view-only + tombol Hubungi, data statis)
 - ✅ DB di Supabase; satuan jangka waktu = **bulan**
 
 Roadmap (belum): pencatatan transaksi harian, cash-flow bulanan, riwayat multi-anggaran, autentikasi (`userId` sudah nullable di semua model).
