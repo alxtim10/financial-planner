@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, AlertCircle, Check } from "lucide-react";
 import GoalForm, { type GoalValues } from "./GoalForm";
-import RiskSurvey from "./RiskSurvey";
+import RiskSurvey, { type RiskSurveyResult } from "./RiskSurvey";
 import RecommendationCard, {
   type InvestmentRecommendation,
 } from "./RecommendationCard";
@@ -101,7 +101,7 @@ export default function InvestmentWizard() {
   }
 
   /** Langkah 2 selesai: ambil savings, hitung rekomendasi, lanjut ke langkah 3. */
-  async function handleSurveyComplete(riskAnswers: number[]) {
+  async function handleSurveyComplete({ answers: riskAnswers, selectedInstruments }: RiskSurveyResult) {
     if (!goal) {
       setError("Data tujuan tidak ditemukan. Silakan mulai dari awal.");
       setStep(1);
@@ -136,6 +136,8 @@ export default function InvestmentWizard() {
           targetAmount: goal.targetAmount,
           horizonMonths: goal.horizonMonths,
           riskAnswers,
+          // Pilihan instrumen opsional; kosong = sistem menentukan alokasi.
+          selectedInstruments,
           currentSavings,
         }),
       });

@@ -1,14 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, ShieldQuestion } from "lucide-react";
+import { ArrowLeft, ArrowRight, ShieldQuestion, Sparkles } from "lucide-react";
+import {
+  INSTRUMENT_CATEGORIES,
+  type InstrumentCategory,
+} from "@/lib/investment/allocation";
+
+/** Hasil survei: jawaban risiko (wajib) + pilihan instrumen (opsional). */
+export interface RiskSurveyResult {
+  answers: number[];
+  /** Kategori instrumen yang dipilih pengguna; kosong = sistem menentukan. */
+  selectedInstruments: InstrumentCategory[];
+}
 
 interface RiskSurveyProps {
-  /** Dipanggil saat kelima jawaban terisi. `answers` selalu berpanjang 5. */
-  onComplete: (answers: number[]) => void;
+  /** Dipanggil saat kelima jawaban risiko terisi. `answers` selalu berpanjang 5. */
+  onComplete: (result: RiskSurveyResult) => void;
   /** Kembali ke langkah sebelumnya (Goal). */
   onBack?: () => void;
 }
+
+/** Deskripsi singkat tiap kategori instrumen untuk pertanyaan opsional. */
+const INSTRUMENT_HINTS: Record<InstrumentCategory, string> = {
+  RDPU: "Pasar uang — risiko paling rendah, mudah dicairkan",
+  "Deposito/SBN": "Deposito & surat utang negara — aman, imbal hasil tetap",
+  Emas: "Lindung nilai inflasi — penyeimbang jangka panjang",
+  "Saham/Indeks": "Potensi tinggi untuk jangka panjang, lebih fluktuatif",
+  RDPT: "Reksa dana obligasi — risiko & imbal hasil menengah",
+};
 
 interface Option {
   label: string;
@@ -88,6 +108,10 @@ export default function RiskSurvey({ onComplete, onBack }: RiskSurveyProps) {
   const [answers, setAnswers] = useState<(number | null)[]>(
     () => QUESTIONS.map(() => null),
   );
+  // Pertanyaan opsional: kategori instrumen yang diminati (boleh kosong).
+  const [selectedInstruments, setSelectedInstruments] = useState<InstrumentCategory[]>(
+    [],
+  );
   const [error, setError] = useState<string | null>(null);
 
   function selectOption(qIndex: number, weight: number) {
@@ -99,6 +123,12 @@ export default function RiskSurvey({ onComplete, onBack }: RiskSurveyProps) {
     if (error) setError(null);
   }
 
+  function toggleInstrument(cat: InstrumentCategory) {
+    setSelectedInstruments((prev) =>
+      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat],
+    );
+  }
+
   const answeredCount = answers.filter((a) => a !== null).length;
   const allAnswered = answeredCount === QUESTIONS.length;
 
@@ -108,7 +138,7 @@ export default function RiskSurvey({ onComplete, onBack }: RiskSurveyProps) {
       setError("Mohon jawab semua pertanyaan terlebih dahulu.");
       return;
     }
-    onComplete(answers as number[]);
+    onComplete({ answers: answers as number[], selectedInstruments });
   }
 
   return (
@@ -179,6 +209,74 @@ export default function RiskSurvey({ onComplete, onBack }: RiskSurveyProps) {
             </div>
           </div>
         ))}
+      </fieldset>
+
+      {/* Pertanyaan opsional: pilihan instrumen (menentukan komposisi hasil) */}
+      <fieldset className="flex flex-col gap-3 rounded-xl border border-dashed border-border bg-background/60 p-4">
+        <legend className="flex items-center gap-1.5 px-1 text-sm font-medium text-foreground">
+          <Sparkles className="h-4 w-4 text-[var(--accent)]" />
+          Instrumen yang Anda minati{" "}
+          <span className="font-normal text-muted">(opsional)</span>
+        </legend>
+        <p className="text-xs leading-relaxed text-muted">
+          Pilih satu atau beberapa instrumen bila Anda punya preferensi — komposisi
+          rekomendasi akan menyesuaikan pilihan Anda. Kosongkan bila ingin sistem yang
+          menentukan secara otomatis.
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {INSTRUMENT_CATEGORIES.map((cat) => {
+            const checked = selectedInstruments.includes(cat);
+            return (
+              <label
+                key={cat}
+                className={`flex cursor-pointer items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm transition-colors ${
+                  checked
+                    ? "border-[var(--accent)] bg-accent-soft text-foreground"
+                    : "border-border bg-surface text-muted hover:border-[var(--accent)]/40 hover:text-foreground"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleInstrument(cat)}
+                  className="sr-only"
+                />
+                <span
+                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                    checked
+                      ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                      : "border-border"
+                  }`}
+                >
+                  {checked && (
+                    <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none">
+                      <path
+                        d="M2.5 6.5l2.5 2.5 4.5-5"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
+                </span>
+                <span className="flex flex-col gap-0.5 leading-snug">
+                  <span className="font-medium text-foreground">{cat}</span>
+                  <span className="text-xs text-muted">{INSTRUMENT_HINTS[cat]}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        {selectedInstruments.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setSelectedInstruments([])}
+            className="self-start text-xs font-medium text-[var(--accent)] hover:underline"
+          >
+            Kosongkan pilihan (biar sistem yang tentukan)
+          </button>
+        )}
       </fieldset>
 
       {error && (
