@@ -4,7 +4,7 @@ import ConsultantCard from "@/components/consultant/ConsultantCard";
 import { CONSULTANTS } from "@/lib/consultants";
 
 export const metadata = {
-  title: "Konsultan Keuangan — TabungOne",
+  title: "Konsultan Keuangan — Tabungin",
   description:
     "Daftar konsultan keuangan yang bisa Anda hubungi untuk berkonsultasi lebih lanjut.",
 };
@@ -51,7 +51,7 @@ export default function ConsultantsPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-muted">
-          Daftar ini bersifat informatif. TabungOne tidak memungut biaya dan
+          Daftar ini bersifat informatif. Tabungin tidak memungut biaya dan
           bukan merupakan nasihat keuangan tersertifikasi.
         </p>
       </div>

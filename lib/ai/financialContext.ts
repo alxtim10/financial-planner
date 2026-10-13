@@ -31,7 +31,7 @@ export async function getFinancialTwinContext(): Promise<string> {
     }
 
     const lines: string[] = ["\n\n--- KONTEKS DATA FINANSIAL PENGGUNA (FINANCIAL TWIN) ---"];
-    lines.push("Berikut adalah data kondisi keuangan riil pengguna saat ini di TabungOne. Gunakan data ini secara langsung tanpa perlu bertanya ulang:");
+    lines.push("Berikut adalah data kondisi keuangan riil pengguna saat ini di Tabungin. Gunakan data ini secara langsung tanpa perlu bertanya ulang:");
 
     if (profile) {
       const emergency = evaluateEmergencyFund(profile.currentSavings, profile.expense);
