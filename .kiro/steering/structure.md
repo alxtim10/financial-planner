@@ -8,8 +8,8 @@ app/
     profile/route.ts         # POST/GET Financial_Profile
     goal/route.ts            # POST/GET Goal (Tujuan Aktif); horizonMonths
     recommendation/route.ts  # POST rekomendasi investasi (rule-based)
-    budget/route.ts          # GET konteks Planner + prefill goal; POST hitung+simpan
-    chat/route.ts            # proxy streaming Gemini (PoC, tak berubah)
+    budget/route.ts          # GET konteks Planner + prefill goal; POST hitung+simpan (+ trade-offs bila tak layak)
+    chat/route.ts            # streaming Gemini + inject Financial Twin (getFinancialTwinContext)
   page.tsx                   # dashboard (server): profil + ActiveGoalCard + CTA + nav
   profile/page.tsx           # form profil
   investment/page.tsx        # wizard Investasi
@@ -18,18 +18,20 @@ app/
 components/
   goal/        ActiveGoalCard.tsx, GoalEditor.tsx
   investment/  GoalForm.tsx, RiskSurvey.tsx, RecommendationCard.tsx, InvestmentWizard.tsx
-  planner/     BudgetForm.tsx, BudgetResultCard.tsx, PlannerWizard.tsx, PresetPicker.tsx(pensiun)
-  profile/     ProfileForm.tsx, ProfileGate.tsx
+  planner/     BudgetForm.tsx, BudgetResultCard.tsx, PlannerWizard.tsx, TradeOffCards.tsx, PresetPicker.tsx(pensiun)
+  profile/     ProfileForm.tsx, ProfileGate.tsx, EmergencyFundCard.tsx
   Chat*.tsx    ChatDrawer, ChatInterface, MessageBubble
 lib/
-  db.ts                # Prisma singleton
+  db.ts                # Prisma singleton (driver adapter PrismaPg/pg)
   goal.ts              # getActiveGoal() — baris Goal terbaru
   profileGate.ts       # getLatestProfile()
   prompt.ts            # system prompt chatbot
+  ai/                  financialContext.ts — getFinancialTwinContext() (konteks chat data-aware)
+  financial/           emergencyFund.ts (pure) + emergencyFund.test.ts
   investment/          allocation.ts, projection.ts, riskScoring.ts  (pure)
-  planner/             goalBudget.ts (AKTIF) ; presets.ts/budget.ts/savingsProjection.ts (PENSIUN)
+  planner/             goalBudget.ts + tradeoffs.ts (AKTIF, pure) ; presets.ts/budget.ts/savingsProjection.ts (PENSIUN)
   format/rupiahInput.ts
-types/                 finance.ts, planner.ts, chat.ts
+types/                 finance.ts, planner.ts, chat.ts, usp.ts (dana darurat + trade-off + Financial Twin)
 prisma/                schema.prisma + migrations/
 ```
 
@@ -42,9 +44,10 @@ prisma/                schema.prisma + migrations/
 
 ## Alur data inti
 
-- Dashboard (`app/page.tsx`, server) baca `getLatestProfile()` + `getActiveGoal()` → render.
+- Dashboard (`app/page.tsx`, server) baca `getLatestProfile()` + `getActiveGoal()` → render + `EmergencyFundCard` (evaluasi dana darurat dari profil).
 - Investasi: `InvestmentWizard` fetch `GET /api/goal` (prefill) → `GoalForm` → `RiskSurvey` → `POST /api/recommendation` (`getAllocation` + `calculateMonthlyContribution`) → `RecommendationCard`.
-- Planner: `PlannerWizard` fetch `GET /api/budget` (prefill dari Tujuan Aktif) → `BudgetForm` → `POST /api/budget` (`computeGoalBudget`) → `BudgetResultCard`.
+- Planner: `PlannerWizard` fetch `GET /api/budget` (prefill dari Tujuan Aktif) → `BudgetForm` → `POST /api/budget` (`computeGoalBudget`) → `BudgetResultCard`. Bila `feasibility.severity !== "ok"`, API ikut mengisi `tradeOffs` (`computeTradeOffs`) → `TradeOffCards` (terapkan satu klik, override form).
+- Chat: `ChatInterface` → `POST /api/chat` → `getFinancialTwinContext()` merangkai data pengguna terkini (profil, goal, risiko, rekomendasi, budget, dana darurat) ke `systemInstruction` Gemini.
 - Goal dibuat **hanya** dari dashboard (`GoalEditor` → `POST /api/goal`). Investasi/Planner hanya prefill + override satu kali (tidak buat Goal baru).
 
 ## Modul pensiun (jangan dipakai untuk fitur goal-driven)
