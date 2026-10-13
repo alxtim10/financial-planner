@@ -14,24 +14,27 @@ app/
   profile/page.tsx           # form profil
   investment/page.tsx        # wizard Investasi
   planner/page.tsx           # wizard Planner
+  consultants/page.tsx       # daftar konsultan keuangan (view-only, statis)
   layout.tsx                 # root layout + ChatDrawer (semua halaman)
 components/
   goal/        ActiveGoalCard.tsx, GoalEditor.tsx
   investment/  GoalForm.tsx, RiskSurvey.tsx, RecommendationCard.tsx, InvestmentWizard.tsx
   planner/     BudgetForm.tsx, BudgetResultCard.tsx, PlannerWizard.tsx, TradeOffCards.tsx, PresetPicker.tsx(pensiun)
   profile/     ProfileForm.tsx, ProfileGate.tsx, EmergencyFundCard.tsx
+  consultant/  ConsultantCard.tsx
   Chat*.tsx    ChatDrawer, ChatInterface, MessageBubble
 lib/
   db.ts                # Prisma singleton (driver adapter PrismaPg/pg)
   goal.ts              # getActiveGoal() — baris Goal terbaru
   profileGate.ts       # getLatestProfile()
+  consultants.ts       # data statis konsultan + buildContactHref/contactLabel (pure)
   prompt.ts            # system prompt chatbot
   ai/                  financialContext.ts — getFinancialTwinContext() (konteks chat data-aware)
   financial/           emergencyFund.ts (pure) + emergencyFund.test.ts
   investment/          allocation.ts (+ applyInstrumentPreference, pure+test), projection.ts, riskScoring.ts  (pure)
   planner/             goalBudget.ts + tradeoffs.ts (AKTIF, pure) ; presets.ts/budget.ts/savingsProjection.ts (PENSIUN)
   format/rupiahInput.ts
-types/                 finance.ts, planner.ts, chat.ts, usp.ts (dana darurat + trade-off + Financial Twin)
+types/                 finance.ts, planner.ts, chat.ts, usp.ts (dana darurat + trade-off + Financial Twin), consultant.ts
 prisma/                schema.prisma + migrations/
 ```
 
