@@ -10,7 +10,13 @@ Aplikasi web (Next.js App Router) untuk perencanaan keuangan personal terstruktu
 
 **Tujuan Aktif (Active Goal)** = satu tujuan tersentralisasi (baris `Goal` terbaru, "latest wins"), dikelola dari dashboard, dipakai bersama Investasi & Planner (prefill; override di scope bersifat satu kali dan tidak mengubah tujuan tersimpan).
 
-**Chatbot Gemini** = fitur pelengkap berupa drawer geser dari kanan, tersedia di semua halaman. Logika `POST /api/chat` tidak berubah dari fase PoC.
+**Chatbot Gemini (data-aware / Financial Twin)** = fitur pelengkap berupa drawer geser dari kanan, tersedia di semua halaman. `POST /api/chat` kini **meng-inject konteks keuangan riil pengguna** (Profil, Tujuan Aktif, Risiko, Rekomendasi, Budget, rasio dana darurat) ke `systemInstruction` Gemini lewat `lib/ai/financialContext.ts` → chatbot menjawab tanpa menanyakan ulang angka. Angka tetap dihitung pure function, LLM hanya naratif.
+
+**Dana Darurat (Emergency Fund)** = indikator kesiapan likuiditas di dashboard & Profil Finansial. Rasio `tabungan / pengeluaran` → tier Rentan (`<3` bln) / Memadai (`3–6` bln) / Kuat (`>6` bln), lengkap rincian "dari mana angka ini" + target ideal 6 bulan.
+
+**Trade-Off Optimizer** = saat rencana Planner tidak layak (tight/impossible), sistem menawarkan ≤3 solusi alternatif (perpanjang jangka waktu / sesuaikan target / efisiensikan pengeluaran) yang bisa diterapkan satu klik ke form Planner.
+
+**Konsultan Keuangan (view-only)** = menu daftar konsultan (`/consultants`) dari data statis (`lib/consultants.ts`) + tombol "Hubungi" yang membuka kanal eksternal (WhatsApp/email/telepon). Tanpa DB, tanpa booking, tanpa Profile_Gate — murni informatif. Data saat ini placeholder.
 
 ## Status fitur (sudah jadi)
 
@@ -18,10 +24,13 @@ Aplikasi web (Next.js App Router) untuk perencanaan keuangan personal terstruktu
 - ✅ Investasi end-to-end (Goal → Survei → Rekomendasi, persisted)
 - ✅ Planner goal-driven (model preset lama sudah disuperseksi)
 - ✅ Tujuan Aktif tersentralisasi (dashboard + prefill Investasi/Planner)
-- ✅ Chatbot drawer
+- ✅ Chatbot drawer **data-aware** (Financial Twin — konteks data pengguna sudah terintegrasi)
+- ✅ Indikator Dana Darurat (dashboard + Profil Finansial)
+- ✅ Trade-Off Optimizer di Planner (saran saat rencana tidak layak)
+- ✅ Daftar Konsultan Keuangan (view-only + tombol Hubungi, data statis)
 - ✅ DB di Supabase; satuan jangka waktu = **bulan**
 
-Roadmap (belum): pencatatan transaksi harian, cash-flow bulanan, riwayat multi-anggaran, integrasi chatbot ke data pengguna, autentikasi (`userId` sudah nullable di semua model).
+Roadmap (belum): pencatatan transaksi harian, cash-flow bulanan, riwayat multi-anggaran, autentikasi (`userId` sudah nullable di semua model).
 
 ## Peta dokumen — baca sesuai urutan ini
 
