@@ -80,7 +80,7 @@ DIRECT_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler
 ```
 - Datasource Prisma memakai `url = env("DATABASE_URL")` (pooled) + `directUrl = env("DIRECT_URL")` (langsung untuk migrasi).
 - **Auth demo** butuh `AUTH_SECRET` (wajib, min. 16 karakter — penandatangan JWT session). Opsional `SEED_USERNAME`/`SEED_PASSWORD` untuk kredensial akun demo (default `demo`/`demo1234`).
-- **Rate limit chat** opsional `CHAT_DAILY_LIMIT` (batas pesan chat AI per pengguna per hari; default 30).
+- **Rate limit chat** opsional `CHAT_DAILY_LIMIT` (batas harian plan free; default 30) + `CHAT_DAILY_LIMIT_PRO` (batas harian plan pro; default 500).
 - **Dashboard analitik** opsional `ADMIN_USERNAME` (username yang boleh akses `/admin/analytics`; kosong = semua pengguna login dianggap admin saat demo).
 - String koneksi diambil dari Supabase Dashboard → Project Settings → Database → Connection string; ganti `[PROJECT-REF]`, `[PASSWORD]`, `[REGION]`.
 - Skema & tabel dibuat lewat Prisma `migrate deploy` (produksi) / `migrate dev` (pengembangan) — bukan `createdb` lokal lagi.
@@ -94,7 +94,7 @@ Delapan model Prisma. Model data keuangan menyertakan `userId` (kolom DB tetap n
 
 | Model | Field inti | Peran |
 |---|---|---|
-| `User` | `username` (unik), `passwordHash` | Akun login (auth demo). Password di-hash scrypt. |
+| `User` | `username` (unik), `passwordHash`, `plan` | Akun login (auth demo). Password di-hash scrypt. `plan` = `"free"`\|`"pro"` (default `free`) untuk entitlement. |
 | `FinancialProfile` | `income`, `expense`, `currentSavings` | Sumber kebenaran kondisi keuangan; gate wajib. |
 | `Goal` | `name?`, `targetAmount`, `horizonMonths` | Tujuan Aktif: nama opsional + target + jangka waktu (bulan); sumber Horizon. |
 | `RiskAssessment` | `answers`, `score`, `profile` | Hasil survei risiko + klasifikasi. |
@@ -116,7 +116,7 @@ Chat AI dibatasi **per pengguna per hari** agar biaya Gemini terkendali & menceg
 
 Instrumentasi funnel untuk mengukur niat-ke-konversi (metrik kunci dari analisis bisnis). Event ter-scope `userId` dari session.
 
-- Nama event kanonik (`lib/analytics/events.ts`): `profile_completed`, `goal_set`, `recommendation_generated`, `budget_computed`, `consultant_contact_clicked`, `chat_opened`.
+- Nama event kanonik (`lib/analytics/events.ts`): `profile_completed`, `goal_set`, `recommendation_generated`, `budget_computed`, `consultant_contact_clicked`, `chat_opened`, `upgrade_clicked`.
 - **Server-side** (dicatat langsung di route via `lib/analytics/track.ts` → `trackEvent`, fire-and-forget): `profile_completed`, `goal_set`, `recommendation_generated`, `budget_computed`.
 - **Client-side** (via `POST /api/events` → `lib/analytics/client.ts` → `trackClientEvent`, `fetch keepalive`): `consultant_contact_clicked` (tombol kontak konsultan), `chat_opened` (drawer chat dibuka).
 - `POST /api/events`: tanpa login → `401`; nama event di luar daftar kanonik → `400`; sukses → `204`. Pencatatan tidak boleh memblokir UX.
@@ -124,6 +124,17 @@ Instrumentasi funnel untuk mengukur niat-ke-konversi (metrik kunci dari analisis
 **Dashboard analitik (pemilik produk).** Halaman `/admin/analytics` (`app/admin/analytics/page.tsx`, server) mengagregasi `AnalyticsEvent` **lintas semua pengguna** lewat pure function `computeFunnel` (`lib/analytics/funnel.ts`): pengguna unik per tahap funnel (`profile_completed → goal_set → recommendation_generated`) + conversion rate antar tahap, metrik "niat" (anggaran dihitung, klik konsultan, buka chat), dan total kejadian per event. Agregasi dilakukan di memori (volume demo kecil; bila besar → ganti `COUNT(DISTINCT)` SQL, pure function tetap jadi kontrak).
 
 **Gate admin.** Halaman wajib login lalu dibatasi `isAdmin(username)` (`lib/auth/session.ts`): bila env `ADMIN_USERNAME` diset, hanya username itu; bila kosong, semua pengguna login dianggap admin (cukup untuk demo — perketat sebelum produksi, idealnya kolom role di `User`). Kartu nav "Analitik Funnel" di dashboard hanya tampil untuk admin.
+
+### 3.4 Entitlement free/pro (monetisasi)
+
+Fondasi freemium untuk menguji minat berbayar sebelum memasang pembayaran. Sumber kebenaran tunggal di `lib/billing/plan.ts` (`isPro`, `normalizePlan`, `chatDailyLimit(plan)`, `PRO_FEATURES`).
+
+- **Plan:** `User.plan` (`"free"` default | `"pro"`).
+- **Yang digate ke Pro** (fitur yang sudah ada, bukan fitur baru):
+  - **Kuota chat lebih besar:** free pakai `CHAT_DAILY_LIMIT` (default 30), Pro pakai `CHAT_DAILY_LIMIT_PRO` (default 500). `getUsageStatus(userId, plan)` memakai batas sesuai plan; `429` untuk free menambah ajakan upgrade.
+  - **Proyeksi investasi detail:** `POST /api/recommendation` mengunci `projection.perInstrument` untuk free (`perInstrument: []` + `perInstrumentLocked: true`); nilai inti (alokasi + setoran bulanan + ringkasan FV/pertumbuhan) tetap gratis. Pro menerima breakdown penuh. Respons menyertakan field `plan`.
+- **Halaman `/upgrade`** (`app/upgrade/page.tsx`): menjelaskan benefit (`PRO_FEATURES`) + perbandingan kuota, dengan tombol upgrade. Dashboard menampilkan badge "Pro" atau tautan "Upgrade Pro".
+- **`POST /api/billing/upgrade` = STUB DEMO:** mencatat event `upgrade_clicked` lalu menyetel `plan = "pro"` langsung untuk pengguna login. **Pada produksi WAJIB diganti** callback payment gateway (Midtrans/Xendit) terverifikasi — jangan naikkan plan hanya dari permintaan klien. Belum ada integrasi pembayaran.
 
 ### 3.1 Autentikasi (auth demo — username + password)
 

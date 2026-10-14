@@ -10,6 +10,7 @@ export const ANALYTICS_EVENTS = [
   "budget_computed", // rencana anggaran Planner dihitung
   "consultant_contact_clicked", // klik tombol "Hubungi" konsultan
   "chat_opened", // drawer chat AI dibuka
+  "upgrade_clicked", // klik tombol upgrade ke Pro (uji minat)
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];

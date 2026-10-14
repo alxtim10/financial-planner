@@ -4,6 +4,8 @@ import { FINANCIAL_PLANNER_PROMPT } from "@/lib/prompt";
 import { getFinancialTwinContext } from "@/lib/ai/financialContext";
 import { getCurrentUserId } from "@/lib/auth/session";
 import { getUsageStatus, incrementUsage } from "@/lib/chat/usage";
+import { prisma } from "@/lib/db";
+import { normalizePlan } from "@/lib/billing/plan";
 import type { ChatRequest } from "@/types/chat";
 
 export const runtime = "nodejs";
@@ -41,12 +43,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Silakan login terlebih dahulu." }, { status: 401 });
   }
 
-  // Guard: kuota harian chat AI. Lewat batas → 429 (pesan ramah ID).
-  const usage = await getUsageStatus(userId);
+  // Guard: kuota harian chat AI sesuai plan (free/pro). Lewat batas → 429.
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const plan = normalizePlan(user?.plan);
+  const usage = await getUsageStatus(userId, plan);
   if (!usage.allowed) {
+    const upsell = plan === "pro" ? "" : " Upgrade ke Pro untuk kuota lebih besar.";
     return NextResponse.json(
       {
-        error: `Kuota chat harian (${usage.limit} pesan) sudah habis. Coba lagi besok.`,
+        error: `Kuota chat harian (${usage.limit} pesan) sudah habis. Coba lagi besok.${upsell}`,
       },
       { status: 429 },
     );

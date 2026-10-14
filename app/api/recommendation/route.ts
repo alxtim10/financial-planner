@@ -14,6 +14,7 @@ import {
 import type { AllocationSlice, InvestmentProjection } from "@/types/finance";
 import { getCurrentUserId } from "@/lib/auth/session";
 import { trackEvent } from "@/lib/analytics/track";
+import { isPro } from "@/lib/billing/plan";
 
 export const runtime = "nodejs";
 
@@ -200,9 +201,24 @@ export async function POST(req: Request) {
     monthlyContribution,
   });
 
+  // Gating entitlement: proyeksi detail per-instrumen hanya untuk Pro. Free
+  // tetap mendapat ringkasan proyeksi (FV, total disetor, pertumbuhan).
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const pro = isPro(user?.plan);
+  const gatedProjection: InvestmentProjection & { perInstrumentLocked?: boolean } = pro
+    ? projection
+    : { ...projection, perInstrument: [], perInstrumentLocked: true };
+
   // 6. Sukses. Field lama tetap ada (backward-compatible) + `projection` detail.
   return NextResponse.json(
-    { riskProfile: profile, composition, annualReturn, monthlyContribution, projection },
+    {
+      riskProfile: profile,
+      composition,
+      annualReturn,
+      monthlyContribution,
+      projection: gatedProjection,
+      plan: pro ? "pro" : "free",
+    },
     { status: 200 },
   );
 }

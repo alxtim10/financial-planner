@@ -16,6 +16,7 @@ import {
 import { getLatestProfile } from "@/lib/profileGate";
 import { getActiveGoal } from "@/lib/goal";
 import { getCurrentUserId, isAdmin } from "@/lib/auth/session";
+import { isPro } from "@/lib/billing/plan";
 import { prisma } from "@/lib/db";
 import ActiveGoalCard from "@/components/goal/ActiveGoalCard";
 import EmergencyFundCard from "@/components/profile/EmergencyFundCard";
@@ -56,6 +57,7 @@ export default async function Home() {
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   const admin = isAdmin(user?.username);
+  const pro = isPro(user?.plan);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -68,7 +70,23 @@ export default async function Home() {
               <Sparkles className="h-3.5 w-3.5" />
               Perencana keuangan
             </span>
-            <LogoutButton />
+            <div className="flex items-center gap-2">
+              {pro ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent)] px-2.5 py-1 text-xs font-semibold text-white">
+                  <Sparkles className="h-3 w-3" />
+                  Pro
+                </span>
+              ) : (
+                <Link
+                  href="/upgrade"
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--accent)]/40 bg-accent-soft px-2.5 py-1 text-xs font-medium text-[var(--accent)] transition-colors hover:brightness-105"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Upgrade Pro
+                </Link>
+              )}
+              <LogoutButton />
+            </div>
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
             Tabungin

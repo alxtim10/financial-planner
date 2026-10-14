@@ -1,13 +1,9 @@
 import { prisma } from "@/lib/db";
+import { chatDailyLimit, type Plan } from "@/lib/billing/plan";
 
 // Rate limiting chat AI per pengguna per hari. Hitungan disimpan di DB
 // (ChatUsage) agar konsisten lintas instance runtime (bukan in-memory).
-
-/** Batas pesan chat harian per pengguna (dapat disetel via env). */
-export function dailyLimit(): number {
-  const raw = Number(process.env.CHAT_DAILY_LIMIT);
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 30;
-}
+// Batas bergantung pada plan pengguna (free vs pro).
 
 /** Kunci hari ini sebagai "YYYY-MM-DD" (UTC) — deterministik & sederhana. */
 export function todayKey(now: Date = new Date()): string {
@@ -23,10 +19,10 @@ export interface UsageStatus {
 
 /**
  * Baca status kuota hari ini TANPA menaikkan hitungan. Dipakai untuk
- * memutuskan boleh/tidak sebelum memanggil Gemini.
+ * memutuskan boleh/tidak sebelum memanggil Gemini. Batas sesuai `plan`.
  */
-export async function getUsageStatus(userId: string): Promise<UsageStatus> {
-  const limit = dailyLimit();
+export async function getUsageStatus(userId: string, plan: Plan): Promise<UsageStatus> {
+  const limit = chatDailyLimit(plan);
   const row = await prisma.chatUsage.findUnique({
     where: { userId_day: { userId, day: todayKey() } },
   });

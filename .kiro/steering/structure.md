@@ -12,7 +12,9 @@ app/
     budget/route.ts          # GET konteks Planner + prefill goal; POST hitung+simpan (+ trade-offs bila tak layak)
     chat/route.ts            # streaming Gemini + Financial Twin; wajib login + rate limit harian (ChatUsage)
     events/route.ts          # POST event funnel dari klien (401/400/204); userId dari session
+    billing/upgrade/route.ts # POST STUB demo upgrade ke Pro (tanpa pembayaran; set plan=pro)
   login/page.tsx             # halaman login (auth demo); redirect ke / bila sudah login
+  upgrade/page.tsx           # halaman upgrade Pro (benefit + UpgradeButton); redirect /login bila belum login
   admin/analytics/page.tsx   # dashboard funnel (pemilik); gate getCurrentUserId + isAdmin
   page.tsx                   # dashboard (server): profil + ActiveGoalCard + CTA + nav + logout; redirect /login bila belum login
   profile/page.tsx           # form profil
@@ -22,6 +24,7 @@ app/
   layout.tsx                 # root layout + ChatDrawer (semua halaman)
 components/
   auth/        LoginForm.tsx, LogoutButton.tsx
+  billing/     UpgradeButton.tsx
   goal/        ActiveGoalCard.tsx, GoalEditor.tsx
   investment/  GoalForm.tsx, RiskSurvey.tsx, RecommendationCard.tsx, InvestmentWizard.tsx
   planner/     BudgetForm.tsx, BudgetResultCard.tsx, PlannerWizard.tsx, TradeOffCards.tsx, PresetPicker.tsx(pensiun)
@@ -32,7 +35,8 @@ lib/
   db.ts                # Prisma singleton (driver adapter PrismaPg/pg)
   auth/                password.ts (scrypt), jwt.ts (HS256), session.ts (cookie: getCurrentUserId/requireUserId/set/clear)
   analytics/           events.ts (nama kanonik + isAnalyticsEvent), track.ts (server trackEvent), client.ts (klien trackClientEvent), funnel.ts (computeFunnel agregasi, pure)
-  chat/                usage.ts (rate limit harian: dailyLimit/getUsageStatus/incrementUsage)
+  billing/             plan.ts (entitlement free/pro: isPro/normalizePlan/chatDailyLimit/PRO_FEATURES)
+  chat/                usage.ts (rate limit harian per plan: getUsageStatus(userId,plan)/incrementUsage)
   goal.ts              # getActiveGoal(userId) — baris Goal terbaru milik user
   profileGate.ts       # getLatestProfile(userId)
   consultants.ts       # data statis konsultan + buildContactHref/contactLabel (pure)
@@ -56,6 +60,7 @@ prisma/                schema.prisma + migrations/
 - **Analitik** → event baru WAJIB didaftarkan di `lib/analytics/events.ts` (nama kanonik) dulu; server pakai `trackEvent`, klien pakai `trackClientEvent` → `POST /api/events`. Semua pencatatan fire-and-forget. Agregasi/metrik dashboard = pure function di `lib/analytics/funnel.ts`.
 - **Halaman admin** → di bawah `app/admin/*`, gate `getCurrentUserId()` (→ `/login`) + `isAdmin(username)` (→ `/`). Bukan fitur end-user.
 - **Rate limit chat** → logika di `lib/chat/usage.ts` (DB-backed `ChatUsage`); jangan simpan kuota in-memory.
+- **Entitlement** → gating fitur lewat `lib/billing/plan.ts` (`isPro`/`chatDailyLimit`), jangan sebar cek `plan` manual. Perubahan plan hanya sisi server; `/api/billing/upgrade` masih stub demo (ganti payment gateway di produksi).
 
 ## Alur data inti
 
