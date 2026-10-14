@@ -114,7 +114,8 @@ app/
   layout.tsx      # root layout + ChatDrawer
 components/
   auth/           # LoginForm, LogoutButton
-  billing/        # UpgradeButton
+  billing/        # UpgradeButton, PricingCards
+  consultant/     # ConsultantCard, ContactButton, BookingRequest
   goal/           # ActiveGoalCard, GoalEditor
   investment/     # GoalForm, RiskSurvey, RecommendationCard, InvestmentWizard
   planner/        # BudgetForm, BudgetResultCard, PlannerWizard
@@ -123,7 +124,7 @@ lib/
   db.ts           # Prisma singleton
   auth/           # password (scrypt), jwt (HS256), session (cookie helpers)
   analytics/      # events (nama kanonik), track (server), client (klien), funnel (agregasi)
-  billing/        # plan (entitlement free/pro: isPro, chatDailyLimit, PRO_FEATURES)
+  billing/        # plan (entitlement free/pro), pricing (tier harga uji minat)
   chat/           # usage (rate limit harian chat AI, per plan)
   goal.ts         # getActiveGoal(userId)
   profileGate.ts  # getLatestProfile(userId)

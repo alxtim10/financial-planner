@@ -16,13 +16,13 @@ Aplikasi web (Next.js App Router) untuk perencanaan keuangan personal terstruktu
 
 **Analitik funnel** = pencatatan event (profil → tujuan → rekomendasi → konsultan/chat) per pengguna untuk mengukur niat-ke-konversi. Server-side di route + klien via `POST /api/events`. **Dashboard pemilik produk** di `/admin/analytics` menampilkan pengguna unik per tahap + conversion rate + total event (agregasi lintas pengguna; gate `isAdmin`/`ADMIN_USERNAME`).
 
-**Entitlement free/pro (freemium)** = `User.plan` (`free`/`pro`). Pro membuka kuota chat AI lebih besar + proyeksi investasi detail per instrumen; nilai inti tetap gratis. Halaman `/upgrade` + event `upgrade_clicked` dipakai menguji minat berbayar. `POST /api/billing/upgrade` masih **stub demo tanpa pembayaran** — belum ada integrasi payment gateway.
+**Entitlement free/pro (freemium)** = `User.plan` (`free`/`pro`). Pro membuka kuota chat AI lebih besar + proyeksi investasi detail per instrumen; nilai inti tetap gratis. Halaman `/upgrade` menampilkan **tier harga ilustratif** (toggle bulanan/tahunan) + event `upgrade_clicked` untuk menguji minat berbayar. `POST /api/billing/upgrade` masih **stub demo tanpa pembayaran** — belum ada integrasi payment gateway.
 
 **Dana Darurat (Emergency Fund)** = indikator kesiapan likuiditas di dashboard & Profil Finansial. Rasio `tabungan / pengeluaran` → tier Rentan (`<3` bln) / Memadai (`3–6` bln) / Kuat (`>6` bln), lengkap rincian "dari mana angka ini" + target ideal 6 bulan.
 
 **Trade-Off Optimizer** = saat rencana Planner tidak layak (tight/impossible), sistem menawarkan ≤3 solusi alternatif (perpanjang jangka waktu / sesuaikan target / efisiensikan pengeluaran) yang bisa diterapkan satu klik ke form Planner.
 
-**Konsultan Keuangan (view-only)** = menu daftar konsultan (`/consultants`) dari data statis (`lib/consultants.ts`) + tombol "Hubungi" yang membuka kanal eksternal (WhatsApp/email/telepon). Tanpa DB, tanpa booking, tanpa Profile_Gate — murni informatif. Data saat ini placeholder.
+**Konsultan Keuangan (lead capture)** = menu daftar konsultan (`/consultants`) dari data statis (`lib/consultants.ts`). Tiap kartu punya "Minta konsultasi" (menyimpan lead `Booking` via `POST /api/bookings`, wajib login, opsional sertakan ringkasan Financial Twin atas izin) + tombol "Hubungi" kanal eksternal. Konsultan masih data placeholder; yang bernilai bisnis = lead-nya tertangkap & terukur. Belum ada booking terjadwal/pembayaran.
 
 ## Status fitur (sudah jadi)
 
@@ -37,10 +37,11 @@ Aplikasi web (Next.js App Router) untuk perencanaan keuangan personal terstruktu
 - ✅ Chatbot drawer **data-aware** (Financial Twin — konteks data pengguna sudah terintegrasi)
 - ✅ Indikator Dana Darurat (dashboard + Profil Finansial)
 - ✅ Trade-Off Optimizer di Planner (saran saat rencana tidak layak)
-- ✅ Daftar Konsultan Keuangan (view-only + tombol Hubungi, data statis)
+- ✅ Konsultan Keuangan: lead capture (`Booking` via `/api/bookings`) + tombol Hubungi (data statis)
+- ✅ Uji harga di `/upgrade` (tier Free/Pro, harga ilustratif, env-tunable)
 - ✅ DB di Supabase; satuan jangka waktu = **bulan**
 
-Roadmap (belum): pencatatan transaksi harian, cash-flow bulanan, riwayat multi-anggaran, **integrasi pembayaran** (upgrade Pro kini stub demo), marketplace booking konsultan. Auth sudah ada (demo); peningkatan ke level produksi (registrasi mandiri, reset password, rate limiting login, CSRF) belum.
+Roadmap (belum): pencatatan transaksi harian, cash-flow bulanan, riwayat multi-anggaran, **integrasi pembayaran** (upgrade Pro kini stub demo), **panel admin daftar Booking** + penjadwalan/komisi konsultan (kini baru lead capture). Auth sudah ada (demo); peningkatan ke level produksi (registrasi mandiri, reset password, rate limiting login, CSRF) belum.
 
 ## Peta dokumen — baca sesuai urutan ini
 

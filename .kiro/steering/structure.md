@@ -13,6 +13,7 @@ app/
     chat/route.ts            # streaming Gemini + Financial Twin; wajib login + rate limit harian (ChatUsage)
     events/route.ts          # POST event funnel dari klien (401/400/204); userId dari session
     billing/upgrade/route.ts # POST STUB demo upgrade ke Pro (tanpa pembayaran; set plan=pro)
+    bookings/route.ts        # POST lead konsultasi (wajib login; validasi consultantId; snapshot opsional)
   login/page.tsx             # halaman login (auth demo); redirect ke / bila sudah login
   upgrade/page.tsx           # halaman upgrade Pro (benefit + UpgradeButton); redirect /login bila belum login
   admin/analytics/page.tsx   # dashboard funnel (pemilik); gate getCurrentUserId + isAdmin
@@ -24,18 +25,18 @@ app/
   layout.tsx                 # root layout + ChatDrawer (semua halaman)
 components/
   auth/        LoginForm.tsx, LogoutButton.tsx
-  billing/     UpgradeButton.tsx
+  billing/     UpgradeButton.tsx, PricingCards.tsx
   goal/        ActiveGoalCard.tsx, GoalEditor.tsx
   investment/  GoalForm.tsx, RiskSurvey.tsx, RecommendationCard.tsx, InvestmentWizard.tsx
   planner/     BudgetForm.tsx, BudgetResultCard.tsx, PlannerWizard.tsx, TradeOffCards.tsx, PresetPicker.tsx(pensiun)
   profile/     ProfileForm.tsx, ProfileGate.tsx, EmergencyFundCard.tsx
-  consultant/  ConsultantCard.tsx
+  consultant/  ConsultantCard.tsx, ContactButton.tsx, BookingRequest.tsx
   Chat*.tsx    ChatDrawer, ChatInterface, MessageBubble
 lib/
   db.ts                # Prisma singleton (driver adapter PrismaPg/pg)
   auth/                password.ts (scrypt), jwt.ts (HS256), session.ts (cookie: getCurrentUserId/requireUserId/set/clear)
   analytics/           events.ts (nama kanonik + isAnalyticsEvent), track.ts (server trackEvent), client.ts (klien trackClientEvent), funnel.ts (computeFunnel agregasi, pure)
-  billing/             plan.ts (entitlement free/pro: isPro/normalizePlan/chatDailyLimit/PRO_FEATURES)
+  billing/             plan.ts (entitlement free/pro: isPro/normalizePlan/chatDailyLimit/PRO_FEATURES), pricing.ts (tier harga uji minat)
   chat/                usage.ts (rate limit harian per plan: getUsageStatus(userId,plan)/incrementUsage)
   goal.ts              # getActiveGoal(userId) — baris Goal terbaru milik user
   profileGate.ts       # getLatestProfile(userId)
@@ -60,7 +61,8 @@ prisma/                schema.prisma + migrations/
 - **Analitik** → event baru WAJIB didaftarkan di `lib/analytics/events.ts` (nama kanonik) dulu; server pakai `trackEvent`, klien pakai `trackClientEvent` → `POST /api/events`. Semua pencatatan fire-and-forget. Agregasi/metrik dashboard = pure function di `lib/analytics/funnel.ts`.
 - **Halaman admin** → di bawah `app/admin/*`, gate `getCurrentUserId()` (→ `/login`) + `isAdmin(username)` (→ `/`). Bukan fitur end-user.
 - **Rate limit chat** → logika di `lib/chat/usage.ts` (DB-backed `ChatUsage`); jangan simpan kuota in-memory.
-- **Entitlement** → gating fitur lewat `lib/billing/plan.ts` (`isPro`/`chatDailyLimit`), jangan sebar cek `plan` manual. Perubahan plan hanya sisi server; `/api/billing/upgrade` masih stub demo (ganti payment gateway di produksi).
+- **Entitlement** → gating fitur lewat `lib/billing/plan.ts` (`isPro`/`chatDailyLimit`), jangan sebar cek `plan` manual. Perubahan plan hanya sisi server; `/api/billing/upgrade` masih stub demo (ganti payment gateway di produksi). Harga di `lib/billing/pricing.ts`.
+- **Booking konsultan** → lead disimpan via `POST /api/bookings` (model `Booking`), `consultantId` divalidasi ke `CONSULTANTS`; snapshot hanya atas izin + data user sendiri. Konsultan tetap statis di `lib/consultants.ts`.
 
 ## Alur data inti
 
@@ -69,7 +71,8 @@ prisma/                schema.prisma + migrations/
 - Investasi: `InvestmentWizard` fetch `GET /api/goal` (prefill) → `GoalForm` → `RiskSurvey` (5 pertanyaan risiko + 1 pertanyaan instrumen opsional) → `POST /api/recommendation` (`getAllocation` → `applyInstrumentPreference` → `calculateMonthlyContribution`) → `RecommendationCard`. Pilihan instrumen kosong = sistem menentukan; ada pilihan = komposisi difilter+dinormalisasi ke instrumen terpilih.
 - Planner: `PlannerWizard` fetch `GET /api/budget` (prefill dari Tujuan Aktif) → `BudgetForm` → `POST /api/budget` (`computeGoalBudget`) → `BudgetResultCard`. Bila `feasibility.severity !== "ok"`, API ikut mengisi `tradeOffs` (`computeTradeOffs`) → `TradeOffCards` (terapkan satu klik, override form).
 - Chat: `ChatInterface` → `POST /api/chat` (wajib login; cek kuota `ChatUsage` → `429` bila habis) → `getFinancialTwinContext()` merangkai data pengguna terkini (profil, goal, risiko, rekomendasi, budget, dana darurat) ke `systemInstruction` Gemini; `incrementUsage` setelah stream mulai.
-- Analitik: event funnel dicatat di route data (server: `profile_completed`/`goal_set`/`recommendation_generated`/`budget_computed`) dan dari klien via `POST /api/events` (`consultant_contact_clicked`, `chat_opened`).
+- Analitik: event funnel dicatat di route data (server: `profile_completed`/`goal_set`/`recommendation_generated`/`budget_computed`/`consultant_booking_requested`) dan dari klien via `POST /api/events` (`consultant_contact_clicked`, `chat_opened`, `upgrade_clicked`).
+- Konsultan: `/consultants` (statis) → tiap `ConsultantCard` punya `BookingRequest` (`POST /api/bookings` → lead `Booking` + event) + `ContactButton` (kanal eksternal). Upgrade: `/upgrade` (`PricingCards` + `UpgradeButton` → `POST /api/billing/upgrade`).
 - Goal dibuat **hanya** dari dashboard (`GoalEditor` → `POST /api/goal`). Investasi/Planner hanya prefill + override satu kali (tidak buat Goal baru).
 
 ## Modul pensiun (jangan dipakai untuk fitur goal-driven)
