@@ -12,7 +12,7 @@ Aplikasi web perencanaan keuangan personal yang terstruktur (Next.js App Router)
 - **Cakupan Investasi** — dari tujuan + profil risiko (survei singkat) → rekomendasi alokasi berbasis aturan (matriks Horizon × Profil Risiko) + kontribusi bulanan (Future Value of Annuity). Angka bersifat deterministik, bukan hasil LLM.
 - **Cakupan Planner (goal-driven)** — masukkan pemasukan + tujuan + jangka waktu → sistem menghitung berapa yang harus ditabung tiap bulan, lalu memecah kebutuhan/keinginan; persentase adalah **output**, bukan input. Ada peringatan kelayakan (feasibility) saat target terlalu berat.
 - **Chatbot pelengkap** — konsultasi naratif berbasis Gemini (streaming) via drawer geser dari kanan, tersedia di semua halaman. Wajib login + dibatasi kuota harian per pengguna (`CHAT_DAILY_LIMIT`, default 30) → `429` bila habis.
-- **Analitik funnel** — event `profile_completed` / `goal_set` / `recommendation_generated` / `budget_computed` / `consultant_contact_clicked` / `chat_opened` dicatat per pengguna (server-side di route + klien via `POST /api/events`) untuk mengukur konversi.
+- **Analitik funnel** — event `profile_completed` / `goal_set` / `recommendation_generated` / `budget_computed` / `consultant_contact_clicked` / `chat_opened` dicatat per pengguna (server-side di route + klien via `POST /api/events`) untuk mengukur konversi. Dashboard pemilik produk di `/admin/analytics` (agregasi lintas pengguna; gate `ADMIN_USERNAME`).
 
 Investasi & Planner **memprefill** target/jangka waktu dari Tujuan Aktif; pengguna boleh menimpa nilai sebagai skenario satu kali tanpa mengubah tujuan tersimpan.
 
@@ -49,6 +49,7 @@ Investasi & Planner **memprefill** target/jangka waktu dari Tujuan Aktif; penggu
    - `AUTH_SECRET` — **wajib** (min. 16 karakter acak) untuk menandatangani JWT session auth. Buat dengan `openssl rand -hex 32`.
    - `SEED_USERNAME` / `SEED_PASSWORD` — opsional, kredensial akun demo yang dibuat `npm run db:seed` (default `demo` / `demo1234`).
    - `CHAT_DAILY_LIMIT` — opsional, batas pesan chat AI per pengguna per hari (default `30`).
+   - `ADMIN_USERNAME` — opsional, username yang boleh akses dashboard analitik `/admin/analytics` (kosong = semua pengguna login dianggap admin saat demo).
    - `DATABASE_URL` — koneksi Supabase **pooled** (PgBouncer, port `6543`, akhiri `?pgbouncer=true&sslmode=require&uselibpqcompat=true`); dipakai runtime aplikasi melalui driver adapter `@prisma/adapter-pg`.
    - `DIRECT_URL` — koneksi Supabase **langsung** (port `5432`); dipakai Prisma untuk migrasi.
 
@@ -100,6 +101,7 @@ npm run lint     # lint
 app/
   api/            # route: auth (login/logout), profile, goal, recommendation, budget, chat, events
   login/          # halaman login (auth demo)
+  admin/analytics/ # dashboard funnel (pemilik produk; gate admin)
   investment/     # cakupan Investasi (goal > survei > rekomendasi)
   planner/        # cakupan Planner (goal-driven)
   profile/        # form profil finansial
@@ -114,7 +116,7 @@ components/
 lib/
   db.ts           # Prisma singleton
   auth/           # password (scrypt), jwt (HS256), session (cookie helpers)
-  analytics/      # events (nama kanonik), track (server), client (klien)
+  analytics/      # events (nama kanonik), track (server), client (klien), funnel (agregasi)
   chat/           # usage (rate limit harian chat AI)
   goal.ts         # getActiveGoal(userId)
   profileGate.ts  # getLatestProfile(userId)

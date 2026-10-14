@@ -5,7 +5,7 @@
 - **Framework:** Next.js 16 (App Router), React 19, TypeScript
 - **Styling:** Tailwind CSS v4 (token warna Miami blue: `var(--accent)` = biru `rgba(0,180,216,...)`)
 - **AI:** `@google/genai` (streaming, runtime Node.js) — model default `gemini-flash-lite-latest`. Chatbot **data-aware** (Financial Twin): `POST /api/chat` meng-inject konteks keuangan pengguna ke `systemInstruction` (lihat `lib/ai/financialContext.ts`). **Wajib login + rate limit harian per pengguna** (`CHAT_DAILY_LIMIT`, default 30) via `lib/chat/usage.ts` + model `ChatUsage` → `429` bila habis.
-- **Analitik funnel:** model `AnalyticsEvent` + `lib/analytics/*` (events kanonik, `trackEvent` server, `trackClientEvent` klien) + `POST /api/events`. Dipakai mengukur konversi funnel.
+- **Analitik funnel:** model `AnalyticsEvent` + `lib/analytics/*` (events kanonik, `trackEvent` server, `trackClientEvent` klien, `computeFunnel` agregasi) + `POST /api/events`. Dashboard pemilik di `/admin/analytics` (gate `isAdmin` via `ADMIN_USERNAME`; kosong = semua user login = admin saat demo).
 - **DB:** Supabase (PostgreSQL ter-host) + Prisma ORM 6.19.3 lewat **driver adapter `@prisma/adapter-pg`** (`pg`); singleton client di `lib/db.ts`. Adapter `PrismaPg` memakai OpenSSL Node (TLS 1.3) → mengatasi gotcha TLS macOS saat runtime.
 - **Auth (demo):** username + password, **tanpa dependency** (hanya Node `crypto`). Password hash **scrypt** (`lib/auth/password.ts`), session **JWT HS256** di cookie HTTP-only (`lib/auth/jwt.ts` + `lib/auth/session.ts`). Butuh env `AUTH_SECRET` (≥16 char). Akun dibuat via seed (default `demo`/`demo1234`); belum ada registrasi mandiri.
 - **UI utilitas:** `lucide-react`, `react-markdown`, `remark-gfm`
@@ -33,7 +33,7 @@ npm run lint     # eslint
 - **Trade-off Planner:** saat `feasibility.severity !== "ok"`, `computeTradeOffs` (`lib/planner/tradeoffs.ts`) menyusun ≤3 opsi: `EXTEND_HORIZON`, `REDUCE_TARGET`, `REDUCE_WANTS`. Hasil masuk ke `GoalBudgetResult.tradeOffs` (opsional).
 - **Format Rupiah:** `Rp ${Math.round(v).toLocaleString("id-ID")}`. Input ribuan via `lib/format/rupiahInput.ts` (`formatThousands`/`parseThousands`).
 - **Rate limit chat:** hitungan di DB (`ChatUsage`, unik `(userId, day)` dengan `day` = `"YYYY-MM-DD"` UTC), BUKAN in-memory. `getUsageStatus` cek sebelum panggil Gemini; `incrementUsage` (+1) HANYA setelah stream berhasil dimulai (init gagal tak memakan kuota), fire-and-forget. `CHAT_DAILY_LIMIT ≤ 0`/invalid → default 30.
-- **Analitik:** nama event hanya dari daftar kanonik `ANALYTICS_EVENTS` (`lib/analytics/events.ts`); `/api/events` tolak nama non-kanonik (`400`). Pencatatan fire-and-forget (`trackEvent`/`trackClientEvent`) — JANGAN sampai menggagalkan alur bisnis/UX. Event ter-scope `userId` dari session.
+- **Analitik:** nama event hanya dari daftar kanonik `ANALYTICS_EVENTS` (`lib/analytics/events.ts`); `/api/events` tolak nama non-kanonik (`400`). Pencatatan fire-and-forget (`trackEvent`/`trackClientEvent`) — JANGAN sampai menggagalkan alur bisnis/UX. Event ter-scope `userId` dari session. Agregasi dashboard = pure function `computeFunnel` (`lib/analytics/funnel.ts`), tanpa I/O; akses dibatasi `isAdmin` (`lib/auth/session.ts`).
 
 ## Database & migrasi (Supabase)
 

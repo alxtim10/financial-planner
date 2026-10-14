@@ -81,6 +81,7 @@ DIRECT_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler
 - Datasource Prisma memakai `url = env("DATABASE_URL")` (pooled) + `directUrl = env("DIRECT_URL")` (langsung untuk migrasi).
 - **Auth demo** butuh `AUTH_SECRET` (wajib, min. 16 karakter — penandatangan JWT session). Opsional `SEED_USERNAME`/`SEED_PASSWORD` untuk kredensial akun demo (default `demo`/`demo1234`).
 - **Rate limit chat** opsional `CHAT_DAILY_LIMIT` (batas pesan chat AI per pengguna per hari; default 30).
+- **Dashboard analitik** opsional `ADMIN_USERNAME` (username yang boleh akses `/admin/analytics`; kosong = semua pengguna login dianggap admin saat demo).
 - String koneksi diambil dari Supabase Dashboard → Project Settings → Database → Connection string; ganti `[PROJECT-REF]`, `[PASSWORD]`, `[REGION]`.
 - Skema & tabel dibuat lewat Prisma `migrate deploy` (produksi) / `migrate dev` (pengembangan) — bukan `createdb` lokal lagi.
 - Bila koneksi gagal karena kredensial/izin, hentikan dan konfirmasi ke pemilik proyek — jangan memaksa.
@@ -119,6 +120,10 @@ Instrumentasi funnel untuk mengukur niat-ke-konversi (metrik kunci dari analisis
 - **Server-side** (dicatat langsung di route via `lib/analytics/track.ts` → `trackEvent`, fire-and-forget): `profile_completed`, `goal_set`, `recommendation_generated`, `budget_computed`.
 - **Client-side** (via `POST /api/events` → `lib/analytics/client.ts` → `trackClientEvent`, `fetch keepalive`): `consultant_contact_clicked` (tombol kontak konsultan), `chat_opened` (drawer chat dibuka).
 - `POST /api/events`: tanpa login → `401`; nama event di luar daftar kanonik → `400`; sukses → `204`. Pencatatan tidak boleh memblokir UX.
+
+**Dashboard analitik (pemilik produk).** Halaman `/admin/analytics` (`app/admin/analytics/page.tsx`, server) mengagregasi `AnalyticsEvent` **lintas semua pengguna** lewat pure function `computeFunnel` (`lib/analytics/funnel.ts`): pengguna unik per tahap funnel (`profile_completed → goal_set → recommendation_generated`) + conversion rate antar tahap, metrik "niat" (anggaran dihitung, klik konsultan, buka chat), dan total kejadian per event. Agregasi dilakukan di memori (volume demo kecil; bila besar → ganti `COUNT(DISTINCT)` SQL, pure function tetap jadi kontrak).
+
+**Gate admin.** Halaman wajib login lalu dibatasi `isAdmin(username)` (`lib/auth/session.ts`): bila env `ADMIN_USERNAME` diset, hanya username itu; bila kosong, semua pengguna login dianggap admin (cukup untuk demo — perketat sebelum produksi, idealnya kolom role di `User`). Kartu nav "Analitik Funnel" di dashboard hanya tampil untuk admin.
 
 ### 3.1 Autentikasi (auth demo — username + password)
 

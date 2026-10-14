@@ -13,6 +13,7 @@ app/
     chat/route.ts            # streaming Gemini + Financial Twin; wajib login + rate limit harian (ChatUsage)
     events/route.ts          # POST event funnel dari klien (401/400/204); userId dari session
   login/page.tsx             # halaman login (auth demo); redirect ke / bila sudah login
+  admin/analytics/page.tsx   # dashboard funnel (pemilik); gate getCurrentUserId + isAdmin
   page.tsx                   # dashboard (server): profil + ActiveGoalCard + CTA + nav + logout; redirect /login bila belum login
   profile/page.tsx           # form profil
   investment/page.tsx        # wizard Investasi
@@ -30,7 +31,7 @@ components/
 lib/
   db.ts                # Prisma singleton (driver adapter PrismaPg/pg)
   auth/                password.ts (scrypt), jwt.ts (HS256), session.ts (cookie: getCurrentUserId/requireUserId/set/clear)
-  analytics/           events.ts (nama kanonik + isAnalyticsEvent), track.ts (server trackEvent), client.ts (klien trackClientEvent)
+  analytics/           events.ts (nama kanonik + isAnalyticsEvent), track.ts (server trackEvent), client.ts (klien trackClientEvent), funnel.ts (computeFunnel agregasi, pure)
   chat/                usage.ts (rate limit harian: dailyLimit/getUsageStatus/incrementUsage)
   goal.ts              # getActiveGoal(userId) — baris Goal terbaru milik user
   profileGate.ts       # getLatestProfile(userId)
@@ -52,7 +53,8 @@ prisma/                schema.prisma + migrations/
 - **Komponen UI** → `components/<scope>/`; client component untuk form/interaktif; token Miami blue.
 - **Model data** → `prisma/schema.prisma`; migrasi lewat folder `prisma/migrations/` (di macOS terapkan via `psql`, lihat tech.md).
 - **Auth** → helper di `lib/auth/*` (jangan duplikasi hashing/JWT di tempat lain); halaman/route yang butuh identitas pakai `getCurrentUserId()`/`requireUserId()`.
-- **Analitik** → event baru WAJIB didaftarkan di `lib/analytics/events.ts` (nama kanonik) dulu; server pakai `trackEvent`, klien pakai `trackClientEvent` → `POST /api/events`. Semua pencatatan fire-and-forget.
+- **Analitik** → event baru WAJIB didaftarkan di `lib/analytics/events.ts` (nama kanonik) dulu; server pakai `trackEvent`, klien pakai `trackClientEvent` → `POST /api/events`. Semua pencatatan fire-and-forget. Agregasi/metrik dashboard = pure function di `lib/analytics/funnel.ts`.
+- **Halaman admin** → di bawah `app/admin/*`, gate `getCurrentUserId()` (→ `/login`) + `isAdmin(username)` (→ `/`). Bukan fitur end-user.
 - **Rate limit chat** → logika di `lib/chat/usage.ts` (DB-backed `ChatUsage`); jangan simpan kuota in-memory.
 
 ## Alur data inti

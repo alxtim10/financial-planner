@@ -14,7 +14,7 @@ Aplikasi web (Next.js App Router) untuk perencanaan keuangan personal terstruktu
 
 **Chatbot Gemini (data-aware / Financial Twin)** = fitur pelengkap berupa drawer geser dari kanan, tersedia di semua halaman. `POST /api/chat` kini **meng-inject konteks keuangan riil pengguna** (Profil, Tujuan Aktif, Risiko, Rekomendasi, Budget, rasio dana darurat) ke `systemInstruction` Gemini lewat `lib/ai/financialContext.ts` → chatbot menjawab tanpa menanyakan ulang angka. Angka tetap dihitung pure function, LLM hanya naratif. **Wajib login + dibatasi kuota harian per pengguna** (`CHAT_DAILY_LIMIT`, default 30) untuk kendali biaya & cegah abuse.
 
-**Analitik funnel** = pencatatan event (profil → tujuan → rekomendasi → konsultan/chat) per pengguna untuk mengukur niat-ke-konversi. Server-side di route + klien via `POST /api/events`. Belum ada dashboard analitik (data mentah di `AnalyticsEvent`).
+**Analitik funnel** = pencatatan event (profil → tujuan → rekomendasi → konsultan/chat) per pengguna untuk mengukur niat-ke-konversi. Server-side di route + klien via `POST /api/events`. **Dashboard pemilik produk** di `/admin/analytics` menampilkan pengguna unik per tahap + conversion rate + total event (agregasi lintas pengguna; gate `isAdmin`/`ADMIN_USERNAME`).
 
 **Dana Darurat (Emergency Fund)** = indikator kesiapan likuiditas di dashboard & Profil Finansial. Rasio `tabungan / pengeluaran` → tier Rentan (`<3` bln) / Memadai (`3–6` bln) / Kuat (`>6` bln), lengkap rincian "dari mana angka ini" + target ideal 6 bulan.
 
@@ -26,7 +26,7 @@ Aplikasi web (Next.js App Router) untuk perencanaan keuangan personal terstruktu
 
 - ✅ Login/auth demo (username+password, JWT cookie, data ter-isolasi per `userId`; akun via seed)
 - ✅ Rate limit chat AI harian per pengguna (`ChatUsage`, `CHAT_DAILY_LIMIT`)
-- ✅ Analitik funnel (`AnalyticsEvent` + `/api/events`; dashboard belum)
+- ✅ Analitik funnel (`AnalyticsEvent` + `/api/events`) + dashboard pemilik `/admin/analytics`
 - ✅ Profil Finansial (CRUD dasar via `/api/profile`)
 - ✅ Investasi end-to-end (Goal → Survei → Rekomendasi, persisted)
 - ✅ Planner goal-driven (model preset lama sudah disuperseksi)

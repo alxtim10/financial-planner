@@ -53,3 +53,20 @@ export class UnauthorizedError extends Error {
     this.name = "UnauthorizedError";
   }
 }
+
+/**
+ * Cek apakah pengguna login adalah admin (akses dashboard analitik pemilik).
+ *
+ * Aturan demo sederhana:
+ * - Bila env `ADMIN_USERNAME` diset → hanya username itu yang admin.
+ * - Bila `ADMIN_USERNAME` kosong → semua pengguna yang login dianggap admin
+ *   (cukup untuk demo single-tenant). Harus diperketat sebelum produksi.
+ *
+ * Menerima `username` pemilik session (dipanggil setelah lookup User).
+ */
+export function isAdmin(username: string | null | undefined): boolean {
+  if (!username) return false;
+  const allow = process.env.ADMIN_USERNAME?.trim();
+  if (!allow) return true; // demo: semua user login = admin
+  return username === allow;
+}

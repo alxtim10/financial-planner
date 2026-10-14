@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   ArrowRight,
+  BarChart3,
   LineChart,
   MessageCircle,
   PieChart,
@@ -14,7 +15,8 @@ import {
 } from "lucide-react";
 import { getLatestProfile } from "@/lib/profileGate";
 import { getActiveGoal } from "@/lib/goal";
-import { getCurrentUserId } from "@/lib/auth/session";
+import { getCurrentUserId, isAdmin } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
 import ActiveGoalCard from "@/components/goal/ActiveGoalCard";
 import EmergencyFundCard from "@/components/profile/EmergencyFundCard";
 import LogoutButton from "@/components/auth/LogoutButton";
@@ -51,6 +53,9 @@ export default async function Home() {
   const profile = await getLatestProfile(userId);
   const hasProfile = profile !== null;
   const activeGoal = await getActiveGoal(userId);
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const admin = isAdmin(user?.username);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -281,6 +286,27 @@ export default async function Home() {
                 </p>
               </div>
             </Link>
+
+            {admin && (
+              <Link
+                href="/admin/analytics"
+                className="group flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 transition-colors hover:bg-surface-hover"
+              >
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-[var(--accent)]">
+                  <BarChart3 className="h-5 w-5" />
+                </span>
+                <div className="flex flex-col gap-1">
+                  <h3 className="flex items-center gap-1.5 text-[0.9375rem] font-semibold text-foreground">
+                    Analitik Funnel
+                    <ArrowRight className="h-3.5 w-3.5 text-muted transition-transform group-hover:translate-x-0.5" />
+                  </h3>
+                  <p className="text-sm leading-relaxed text-muted">
+                    Lihat funnel pengguna dan konversi antar tahap (khusus
+                    pemilik produk).
+                  </p>
+                </div>
+              </Link>
+            )}
           </div>
         </section>
 
