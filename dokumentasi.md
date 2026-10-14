@@ -81,6 +81,7 @@ DIRECT_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler
 - Datasource Prisma memakai `url = env("DATABASE_URL")` (pooled) + `directUrl = env("DIRECT_URL")` (langsung untuk migrasi).
 - **Auth demo** butuh `AUTH_SECRET` (wajib, min. 16 karakter — penandatangan JWT session). Opsional `SEED_USERNAME`/`SEED_PASSWORD` untuk kredensial akun demo (default `demo`/`demo1234`).
 - **Rate limit chat** opsional `CHAT_DAILY_LIMIT` (batas harian plan free; default 30) + `CHAT_DAILY_LIMIT_PRO` (batas harian plan pro; default 500).
+- **Uji harga** opsional `PRO_PRICE_MONTHLY` (default 39.000) + `PRO_PRICE_YEARLY_PER_MONTH` (default 29.000) — harga ilustratif plan Pro di `/upgrade`.
 - **Dashboard analitik** opsional `ADMIN_USERNAME` (username yang boleh akses `/admin/analytics`; kosong = semua pengguna login dianggap admin saat demo).
 - String koneksi diambil dari Supabase Dashboard → Project Settings → Database → Connection string; ganti `[PROJECT-REF]`, `[PASSWORD]`, `[REGION]`.
 - Skema & tabel dibuat lewat Prisma `migrate deploy` (produksi) / `migrate dev` (pengembangan) — bukan `createdb` lokal lagi.
@@ -90,7 +91,7 @@ DIRECT_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler
 
 ## 3. Model Data
 
-Delapan model Prisma. Model data keuangan menyertakan `userId` (kolom DB tetap nullable agar migrasi aditif aman), tetapi **sejak fitur auth demo, runtime SELALU mengisi `userId` dari session** dan **semua pembacaan difilter `where: { userId }`** — tidak ada lagi state global yang dibagikan antar-pengguna.
+Sembilan model Prisma. Model data keuangan menyertakan `userId` (kolom DB tetap nullable agar migrasi aditif aman), tetapi **sejak fitur auth demo, runtime SELALU mengisi `userId` dari session** dan **semua pembacaan difilter `where: { userId }`** — tidak ada lagi state global yang dibagikan antar-pengguna.
 
 | Model | Field inti | Peran |
 |---|---|---|
@@ -102,6 +103,7 @@ Delapan model Prisma. Model data keuangan menyertakan `userId` (kolom DB tetap n
 | `BudgetPlan` | `presetId`, `baseAmount`, `mode`, `savingsTargetAmount?`, `savingsHorizonMonths?`, `breakdown` (Json) | Rencana anggaran goal-driven (Planner). Beberapa kolom lama (`manualSavingsTarget`, `includeSavings`, `investmentContribution`) dipensiunkan tetapi dipertahankan. |
 | `ChatUsage` | `userId`, `day`, `count` | Kuota harian chat AI per pengguna (rate limiting). Unik per `(userId, day)`. `day` = `"YYYY-MM-DD"` UTC. |
 | `AnalyticsEvent` | `userId`, `event`, `metadata?` (Json) | Event funnel (profil → tujuan → rekomendasi → konsultan/chat). |
+| `Booking` | `userId`, `consultantId`, `message?`, `snapshot?` (Json), `status` | Lead permintaan konsultasi ke konsultan (marketplace). Konsultan sendiri tetap data statis. |
 
 `FinancialProfile` adalah model terpusat: Planner dan integrasi chatbot membacanya sebagai konteks pengguna (kini ter-scope per `userId`).
 
@@ -116,7 +118,7 @@ Chat AI dibatasi **per pengguna per hari** agar biaya Gemini terkendali & menceg
 
 Instrumentasi funnel untuk mengukur niat-ke-konversi (metrik kunci dari analisis bisnis). Event ter-scope `userId` dari session.
 
-- Nama event kanonik (`lib/analytics/events.ts`): `profile_completed`, `goal_set`, `recommendation_generated`, `budget_computed`, `consultant_contact_clicked`, `chat_opened`, `upgrade_clicked`.
+- Nama event kanonik (`lib/analytics/events.ts`): `profile_completed`, `goal_set`, `recommendation_generated`, `budget_computed`, `consultant_contact_clicked`, `consultant_booking_requested`, `chat_opened`, `upgrade_clicked`.
 - **Server-side** (dicatat langsung di route via `lib/analytics/track.ts` → `trackEvent`, fire-and-forget): `profile_completed`, `goal_set`, `recommendation_generated`, `budget_computed`.
 - **Client-side** (via `POST /api/events` → `lib/analytics/client.ts` → `trackClientEvent`, `fetch keepalive`): `consultant_contact_clicked` (tombol kontak konsultan), `chat_opened` (drawer chat dibuka).
 - `POST /api/events`: tanpa login → `401`; nama event di luar daftar kanonik → `400`; sukses → `204`. Pencatatan tidak boleh memblokir UX.
@@ -135,6 +137,15 @@ Fondasi freemium untuk menguji minat berbayar sebelum memasang pembayaran. Sumbe
   - **Proyeksi investasi detail:** `POST /api/recommendation` mengunci `projection.perInstrument` untuk free (`perInstrument: []` + `perInstrumentLocked: true`); nilai inti (alokasi + setoran bulanan + ringkasan FV/pertumbuhan) tetap gratis. Pro menerima breakdown penuh. Respons menyertakan field `plan`.
 - **Halaman `/upgrade`** (`app/upgrade/page.tsx`): menjelaskan benefit (`PRO_FEATURES`) + perbandingan kuota, dengan tombol upgrade. Dashboard menampilkan badge "Pro" atau tautan "Upgrade Pro".
 - **`POST /api/billing/upgrade` = STUB DEMO:** mencatat event `upgrade_clicked` lalu menyetel `plan = "pro"` langsung untuk pengguna login. **Pada produksi WAJIB diganti** callback payment gateway (Midtrans/Xendit) terverifikasi — jangan naikkan plan hanya dari permintaan klien. Belum ada integrasi pembayaran.
+- **Uji harga (price testing):** `/upgrade` menampilkan tier harga Free vs Pro (toggle bulanan/tahunan) dari `lib/billing/pricing.ts`. Harga **ilustratif**, disetel via env `PRO_PRICE_MONTHLY` (default 39.000) & `PRO_PRICE_YEARLY_PER_MONTH` (default 29.000). Dikombinasikan dengan event `upgrade_clicked` untuk menguji willingness-to-pay sebelum memasang pembayaran.
+
+### 3.5 Marketplace konsultan (lead capture)
+
+Direktori konsultan kini menangkap **lead** permintaan konsultasi (bukan sekadar tautan eksternal). Konsultan sendiri tetap data statis (`lib/consultants.ts`); yang dipersistensi adalah `Booking`.
+
+- **`POST /api/bookings`** (wajib login → `401`): validasi `consultantId` terhadap daftar statis (`400` bila tak dikenal), `message` opsional (dipangkas 1000 char), dan `includeSnapshot` opsional. Bila `includeSnapshot: true`, sistem menyertakan ringkasan Financial Twin (**hanya profil + tujuan milik pengguna sendiri**, atas izin) ke `Booking.snapshot`. Mencatat event `consultant_booking_requested`. Sukses → `201 { id, status }`.
+- **UI** (`components/consultant/BookingRequest.tsx`): tombol "Minta konsultasi" membuka form (pesan + checkbox izin snapshot) di tiap kartu konsultan; tombol "Hubungi" eksternal tetap ada.
+- **Status lead:** `Booking.status` (`requested` default | `contacted` | `closed`) untuk tindak lanjut manual. Belum ada panel admin daftar booking.
 
 ### 3.1 Autentikasi (auth demo — username + password)
 

@@ -1,6 +1,7 @@
 import { MapPin, Star, Briefcase, MessageCircle, Mail, Phone } from "lucide-react";
 import { buildContactHref, contactLabel } from "@/lib/consultants";
 import ContactButton from "@/components/consultant/ContactButton";
+import BookingRequest from "@/components/consultant/BookingRequest";
 import type { FinancialConsultant, ContactMethod } from "@/types/consultant";
 
 interface ConsultantCardProps {
@@ -80,10 +81,13 @@ export default function ConsultantCard({ consultant }: ConsultantCardProps) {
         ))}
       </ul>
 
-      <ContactButton href={href} consultantId={id} method={contact.method}>
-        <Icon className="h-4 w-4" />
-        {contactLabel(contact.method)}
-      </ContactButton>
+      <div className="flex flex-col gap-2">
+        <BookingRequest consultantId={id} consultantName={name} />
+        <ContactButton href={href} consultantId={id} method={contact.method}>
+          <Icon className="h-4 w-4" />
+          {contactLabel(contact.method)}
+        </ContactButton>
+      </div>
     </article>
   );
 }

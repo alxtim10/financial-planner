@@ -76,8 +76,8 @@ export default async function AnalyticsDashboardPage() {
           />
           <SummaryCard
             icon={UserRound}
-            label="Klik kontak konsultan"
-            value={report.intent.consultantClickedUsers.toLocaleString("id-ID")}
+            label="Minta konsultasi (lead)"
+            value={report.intent.consultantBookingUsers.toLocaleString("id-ID")}
           />
           <SummaryCard
             icon={MessageCircle}

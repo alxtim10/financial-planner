@@ -4,7 +4,9 @@ import { ArrowLeft, Check, Sparkles } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth/session";
 import { isPro, chatDailyLimit, PRO_FEATURES } from "@/lib/billing/plan";
+import { priceTiers } from "@/lib/billing/pricing";
 import UpgradeButton from "@/components/billing/UpgradeButton";
+import PricingCards from "@/components/billing/PricingCards";
 
 // Membaca plan pengguna dari DB saat request → render dinamis.
 export const dynamic = "force-dynamic";
@@ -26,6 +28,7 @@ export default async function UpgradePage() {
   const pro = isPro(user?.plan);
   const freeLimit = chatDailyLimit("free");
   const proLimit = chatDailyLimit("pro");
+  const tiers = priceTiers();
 
   return (
     <div className="min-h-dvh bg-background">
@@ -81,6 +84,12 @@ export default async function UpgradePage() {
               </div>
             </div>
           </div>
+        </section>
+
+        {/* Tier harga (uji minat; ilustratif) */}
+        <section className="mb-6">
+          <h2 className="mb-3 text-base font-semibold text-foreground">Pilihan paket</h2>
+          <PricingCards tiers={tiers} currentPlan={pro ? "pro" : "free"} />
         </section>
 
         {pro ? (

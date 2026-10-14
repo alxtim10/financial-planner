@@ -10,12 +10,13 @@ export const metadata = {
 };
 
 /**
- * Halaman Konsultan Keuangan (view-only). Menampilkan daftar konsultan dari
- * data statis (`lib/consultants.ts`) beserta tombol "Hubungi" yang membuka
- * kanal eksternal (WhatsApp/email/telepon). Tanpa DB, tanpa booking.
+ * Halaman Konsultan Keuangan. Menampilkan daftar konsultan dari data statis
+ * (`lib/consultants.ts`). Tiap kartu punya dua aksi: "Minta konsultasi"
+ * (lead capture → `POST /api/bookings`, wajib login) dan "Hubungi" (kanal
+ * eksternal WhatsApp/email/telepon).
  *
- * Tidak dilindungi Profile_Gate: menu ini informatif dan boleh diakses kapan
- * saja. Karena hanya data statis, halaman bisa dirender statis.
+ * Tidak dilindungi Profile_Gate: boleh diakses kapan saja. Daftar konsultan
+ * statis sehingga halaman tetap dirender statis; aksi booking berjalan di klien.
  */
 export default function ConsultantsPage() {
   return (
@@ -38,9 +39,9 @@ export default function ConsultantsPage() {
             Butuh pendampingan lebih lanjut?
           </h1>
           <p className="text-[0.9375rem] leading-relaxed text-muted">
-            Berikut daftar konsultan keuangan yang bisa Anda hubungi langsung
-            untuk berdiskusi sesuai kebutuhan. Pilih yang paling cocok, lalu
-            tekan tombol untuk menghubungi.
+            Berikut daftar konsultan keuangan. Pilih yang paling cocok, lalu
+            kirim permintaan konsultasi (opsional sertakan ringkasan keuangan
+            Anda) atau hubungi langsung lewat kanal eksternal.
           </p>
         </div>
 

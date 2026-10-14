@@ -25,6 +25,7 @@ export interface FunnelReport {
   intent: {
     budgetComputedUsers: number;
     consultantClickedUsers: number;
+    consultantBookingUsers: number;
     chatOpenedUsers: number;
     upgradeClickedUsers: number;
   };
@@ -41,6 +42,7 @@ const STAGE_LABELS: Record<AnalyticsEventName, string> = {
   recommendation_generated: "Rekomendasi dibuat",
   budget_computed: "Anggaran dihitung",
   consultant_contact_clicked: "Klik kontak konsultan",
+  consultant_booking_requested: "Minta konsultasi (lead)",
   chat_opened: "Chat dibuka",
   upgrade_clicked: "Klik upgrade Pro",
 };
@@ -102,6 +104,7 @@ export function computeFunnel(rows: readonly FunnelEventRow[]): FunnelReport {
     intent: {
       budgetComputedUsers: uniqueOf("budget_computed"),
       consultantClickedUsers: uniqueOf("consultant_contact_clicked"),
+      consultantBookingUsers: uniqueOf("consultant_booking_requested"),
       chatOpenedUsers: uniqueOf("chat_opened"),
       upgradeClickedUsers: uniqueOf("upgrade_clicked"),
     },

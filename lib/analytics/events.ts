@@ -9,6 +9,7 @@ export const ANALYTICS_EVENTS = [
   "recommendation_generated", // rekomendasi investasi dihitung
   "budget_computed", // rencana anggaran Planner dihitung
   "consultant_contact_clicked", // klik tombol "Hubungi" konsultan
+  "consultant_booking_requested", // kirim permintaan konsultasi (lead)
   "chat_opened", // drawer chat AI dibuka
   "upgrade_clicked", // klik tombol upgrade ke Pro (uji minat)
 ] as const;

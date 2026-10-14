@@ -92,6 +92,22 @@ model ChatUsage {
   @@unique([userId, day])
 }
 
+// Permintaan konsultasi (lead) ke konsultan keuangan. Konsultan sendiri masih
+// data statis (lib/consultants.ts); yang dipersistensi di sini adalah LEAD-nya.
+// `snapshot` opsional = ringkasan Financial Twin yang disertakan atas izin user.
+model Booking {
+  id           String   @id @default(cuid())
+  userId       String
+  consultantId String
+  message      String?
+  snapshot     Json?
+  status       String   @default("requested") // requested | contacted | closed
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([consultantId])
+}
+
 // Event funnel analitik (profil → tujuan → rekomendasi → konsultan/chat).
 // `metadata` opsional (Json) untuk konteks tambahan per event.
 model AnalyticsEvent {
