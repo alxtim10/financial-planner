@@ -78,3 +78,28 @@ model BudgetPlan {
   breakdown              Json // BudgetLine[] hasil computeBudget
   createdAt              DateTime @default(now())
 }
+
+// Kuota harian chat AI per pengguna (rate limiting). Satu baris per (userId, day).
+// `day` disimpan sebagai string "YYYY-MM-DD" (UTC) agar sederhana & deterministik.
+model ChatUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  day       String
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, day])
+}
+
+// Event funnel analitik (profil → tujuan → rekomendasi → konsultan/chat).
+// `metadata` opsional (Json) untuk konteks tambahan per event.
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  event     String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, event])
+  @@index([event, createdAt])
+}

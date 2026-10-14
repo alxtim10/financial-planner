@@ -2,6 +2,8 @@
 
 Aplikasi web (Next.js App Router) untuk perencanaan keuangan personal terstruktur, target pengguna orang yang belum tentu paham investasi. Bahasa produk & UI: **Bahasa Indonesia**.
 
+**Login (auth demo)** = gate autentikasi di depan semua cakupan. Username + password (password hash scrypt, session JWT di cookie HTTP-only). Semua data ter-isolasi per pengguna — `userId` diambil dari session, bukan body. Tanpa login → halaman redirect ke `/login`, API balas `401`. Akun dibuat lewat **seed** (default `demo`/`demo1234`); belum ada registrasi mandiri.
+
 ## Tiga cakupan
 
 1. **Profil Finansial** (gate wajib) — pemasukan bulanan, pengeluaran bulanan, tabungan saat ini. Tanpa profil, Investasi & Planner terkunci. Field pengeluaran diberi catatan agar menyertakan utang/angsuran + membagi rata pengeluaran non-bulanan (mis. pajak kendaraan ÷ 12).
@@ -10,7 +12,9 @@ Aplikasi web (Next.js App Router) untuk perencanaan keuangan personal terstruktu
 
 **Tujuan Aktif (Active Goal)** = satu tujuan tersentralisasi (baris `Goal` terbaru, "latest wins"), dikelola dari dashboard, dipakai bersama Investasi & Planner (prefill; override di scope bersifat satu kali dan tidak mengubah tujuan tersimpan).
 
-**Chatbot Gemini (data-aware / Financial Twin)** = fitur pelengkap berupa drawer geser dari kanan, tersedia di semua halaman. `POST /api/chat` kini **meng-inject konteks keuangan riil pengguna** (Profil, Tujuan Aktif, Risiko, Rekomendasi, Budget, rasio dana darurat) ke `systemInstruction` Gemini lewat `lib/ai/financialContext.ts` → chatbot menjawab tanpa menanyakan ulang angka. Angka tetap dihitung pure function, LLM hanya naratif.
+**Chatbot Gemini (data-aware / Financial Twin)** = fitur pelengkap berupa drawer geser dari kanan, tersedia di semua halaman. `POST /api/chat` kini **meng-inject konteks keuangan riil pengguna** (Profil, Tujuan Aktif, Risiko, Rekomendasi, Budget, rasio dana darurat) ke `systemInstruction` Gemini lewat `lib/ai/financialContext.ts` → chatbot menjawab tanpa menanyakan ulang angka. Angka tetap dihitung pure function, LLM hanya naratif. **Wajib login + dibatasi kuota harian per pengguna** (`CHAT_DAILY_LIMIT`, default 30) untuk kendali biaya & cegah abuse.
+
+**Analitik funnel** = pencatatan event (profil → tujuan → rekomendasi → konsultan/chat) per pengguna untuk mengukur niat-ke-konversi. Server-side di route + klien via `POST /api/events`. Belum ada dashboard analitik (data mentah di `AnalyticsEvent`).
 
 **Dana Darurat (Emergency Fund)** = indikator kesiapan likuiditas di dashboard & Profil Finansial. Rasio `tabungan / pengeluaran` → tier Rentan (`<3` bln) / Memadai (`3–6` bln) / Kuat (`>6` bln), lengkap rincian "dari mana angka ini" + target ideal 6 bulan.
 
@@ -20,6 +24,9 @@ Aplikasi web (Next.js App Router) untuk perencanaan keuangan personal terstruktu
 
 ## Status fitur (sudah jadi)
 
+- ✅ Login/auth demo (username+password, JWT cookie, data ter-isolasi per `userId`; akun via seed)
+- ✅ Rate limit chat AI harian per pengguna (`ChatUsage`, `CHAT_DAILY_LIMIT`)
+- ✅ Analitik funnel (`AnalyticsEvent` + `/api/events`; dashboard belum)
 - ✅ Profil Finansial (CRUD dasar via `/api/profile`)
 - ✅ Investasi end-to-end (Goal → Survei → Rekomendasi, persisted)
 - ✅ Planner goal-driven (model preset lama sudah disuperseksi)
@@ -30,7 +37,7 @@ Aplikasi web (Next.js App Router) untuk perencanaan keuangan personal terstruktu
 - ✅ Daftar Konsultan Keuangan (view-only + tombol Hubungi, data statis)
 - ✅ DB di Supabase; satuan jangka waktu = **bulan**
 
-Roadmap (belum): pencatatan transaksi harian, cash-flow bulanan, riwayat multi-anggaran, autentikasi (`userId` sudah nullable di semua model).
+Roadmap (belum): pencatatan transaksi harian, cash-flow bulanan, riwayat multi-anggaran. Auth sudah ada (demo); peningkatan ke level produksi (registrasi mandiri, reset password, rate limiting login, CSRF) belum.
 
 ## Peta dokumen — baca sesuai urutan ini
 

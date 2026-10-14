@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth/session";
+import { trackEvent } from "@/lib/analytics/track";
 
 export const runtime = "nodejs";
 
@@ -60,6 +61,7 @@ export async function POST(req: Request) {
     const goal = await prisma.goal.create({
       data: { name, targetAmount, horizonMonths, userId },
     });
+    await trackEvent(userId, "goal_set", { targetAmount, horizonMonths });
     return NextResponse.json(
       {
         id: goal.id,

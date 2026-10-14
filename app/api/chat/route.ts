@@ -2,6 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 import { FINANCIAL_PLANNER_PROMPT } from "@/lib/prompt";
 import { getFinancialTwinContext } from "@/lib/ai/financialContext";
+import { getCurrentUserId } from "@/lib/auth/session";
+import { getUsageStatus, incrementUsage } from "@/lib/chat/usage";
 import type { ChatRequest } from "@/types/chat";
 
 export const runtime = "nodejs";
@@ -30,6 +32,23 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "Konfigurasi server belum lengkap. Hubungi admin." },
       { status: 500 },
+    );
+  }
+
+  // Guard: wajib login (chat dipersonalisasi + dihitung kuota per pengguna).
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Silakan login terlebih dahulu." }, { status: 401 });
+  }
+
+  // Guard: kuota harian chat AI. Lewat batas → 429 (pesan ramah ID).
+  const usage = await getUsageStatus(userId);
+  if (!usage.allowed) {
+    return NextResponse.json(
+      {
+        error: `Kuota chat harian (${usage.limit} pesan) sudah habis. Coba lagi besok.`,
+      },
+      { status: 429 },
     );
   }
 
@@ -80,6 +99,12 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
+
+  // Sesi berhasil dimulai → hitung 1 pemakaian kuota harian. Kegagalan hitung
+  // tidak boleh menggagalkan respons chat (hanya di-log).
+  incrementUsage(userId).catch((err) =>
+    console.error("[chat] gagal menaikkan kuota pemakaian:", err),
+  );
 
   // Alirkan teks polos ke klien. Error mid-stream ditandai sentinel.
   const encoder = new TextEncoder();

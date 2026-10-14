@@ -4,8 +4,10 @@
 
 - **Framework:** Next.js 16 (App Router), React 19, TypeScript
 - **Styling:** Tailwind CSS v4 (token warna Miami blue: `var(--accent)` = biru `rgba(0,180,216,...)`)
-- **AI:** `@google/genai` (streaming, runtime Node.js) — model default `gemini-flash-lite-latest`. Chatbot **data-aware** (Financial Twin): `POST /api/chat` meng-inject konteks keuangan pengguna ke `systemInstruction` (lihat `lib/ai/financialContext.ts`).
+- **AI:** `@google/genai` (streaming, runtime Node.js) — model default `gemini-flash-lite-latest`. Chatbot **data-aware** (Financial Twin): `POST /api/chat` meng-inject konteks keuangan pengguna ke `systemInstruction` (lihat `lib/ai/financialContext.ts`). **Wajib login + rate limit harian per pengguna** (`CHAT_DAILY_LIMIT`, default 30) via `lib/chat/usage.ts` + model `ChatUsage` → `429` bila habis.
+- **Analitik funnel:** model `AnalyticsEvent` + `lib/analytics/*` (events kanonik, `trackEvent` server, `trackClientEvent` klien) + `POST /api/events`. Dipakai mengukur konversi funnel.
 - **DB:** Supabase (PostgreSQL ter-host) + Prisma ORM 6.19.3 lewat **driver adapter `@prisma/adapter-pg`** (`pg`); singleton client di `lib/db.ts`. Adapter `PrismaPg` memakai OpenSSL Node (TLS 1.3) → mengatasi gotcha TLS macOS saat runtime.
+- **Auth (demo):** username + password, **tanpa dependency** (hanya Node `crypto`). Password hash **scrypt** (`lib/auth/password.ts`), session **JWT HS256** di cookie HTTP-only (`lib/auth/jwt.ts` + `lib/auth/session.ts`). Butuh env `AUTH_SECRET` (≥16 char). Akun dibuat via seed (default `demo`/`demo1234`); belum ada registrasi mandiri.
 - **UI utilitas:** `lucide-react`, `react-markdown`, `remark-gfm`
 - **Test:** Vitest (`npm test`). Saat ini ada `lib/smoke.test.ts`, `lib/financial/emergencyFund.test.ts`, `lib/planner/tradeoffs.test.ts` (10 test, pure unit) — belum ada PBT. `fast-check` BUKAN dependency.
 
@@ -30,6 +32,8 @@ npm run lint     # eslint
 - **Dana darurat (bulan):** rasio `coverage = currentSavings / expense`. Tier: `<3` → `VULNERABLE`, `3..6` inklusif → `ADEQUATE`, `>6` → `STRONG`. Target ideal 6 bulan pengeluaran. Pure function `evaluateEmergencyFund` di `lib/financial/emergencyFund.ts`.
 - **Trade-off Planner:** saat `feasibility.severity !== "ok"`, `computeTradeOffs` (`lib/planner/tradeoffs.ts`) menyusun ≤3 opsi: `EXTEND_HORIZON`, `REDUCE_TARGET`, `REDUCE_WANTS`. Hasil masuk ke `GoalBudgetResult.tradeOffs` (opsional).
 - **Format Rupiah:** `Rp ${Math.round(v).toLocaleString("id-ID")}`. Input ribuan via `lib/format/rupiahInput.ts` (`formatThousands`/`parseThousands`).
+- **Rate limit chat:** hitungan di DB (`ChatUsage`, unik `(userId, day)` dengan `day` = `"YYYY-MM-DD"` UTC), BUKAN in-memory. `getUsageStatus` cek sebelum panggil Gemini; `incrementUsage` (+1) HANYA setelah stream berhasil dimulai (init gagal tak memakan kuota), fire-and-forget. `CHAT_DAILY_LIMIT ≤ 0`/invalid → default 30.
+- **Analitik:** nama event hanya dari daftar kanonik `ANALYTICS_EVENTS` (`lib/analytics/events.ts`); `/api/events` tolak nama non-kanonik (`400`). Pencatatan fire-and-forget (`trackEvent`/`trackClientEvent`) — JANGAN sampai menggagalkan alur bisnis/UX. Event ter-scope `userId` dari session.
 
 ## Database & migrasi (Supabase)
 
@@ -42,10 +46,12 @@ npm run lint     # eslint
   # lalu catat di _prisma_migrations bila perlu agar Prisma konsisten
   ```
 - **Setelah migrasi apa pun:** regenerasi client (`npx prisma generate`) dan **restart `npm run dev`** agar client baru termuat (kalau tidak, POST bisa 500 / kolom baru tak terbaca).
+- **Seed (`npm run db:seed` → `prisma/seed.ts`):** buat akun demo (`SEED_USERNAME`/`SEED_PASSWORD`, default `demo`/`demo1234`) + adopsi baris `userId = null` ke akun itu. Seed **harus pakai `PrismaPg` adapter** (seperti `lib/db.ts`), bukan `new PrismaClient()` polos — kalau tidak kena `P1011` TLS macOS. `prisma.config.ts` memuat `.env.local` & mendefinisikan perintah seed.
 
 ## Konvensi kode
 
 - Logika bisnis = pure functions di `lib/` (tanpa I/O/UI/DB), hanya impor tipe dari `@/types/*`. API route memanggilnya.
-- Semua model Prisma punya `userId String?` (placeholder auth, MVP tanpa auth).
+- Model data keuangan punya `userId String?` (kolom DB tetap nullable), tetapi **runtime WAJIB mengisi `userId` dari session** (`getCurrentUserId()`), **bukan dari body**. Semua pembacaan difilter `where: { userId }` — tak ada state global antar-pengguna. `getLatestProfile(userId)`/`getActiveGoal(userId)` menerima `userId`.
+- **Auth guard:** API tanpa session → `401` (pesan ramah ID); halaman server (`app/page.tsx`, `/profile`, `ProfileGate` untuk `/investment` & `/planner`) redirect ke `/login`. `userId` di body request diabaikan/dihapus.
 - Error API → pesan ramah Bahasa Indonesia, tanpa detail internal. Validasi input di server (400) dan mirror di klien.
 - Tulis kode & dokumen dalam **Bahasa Indonesia**.

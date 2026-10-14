@@ -6,11 +6,13 @@ Aplikasi web perencanaan keuangan personal yang terstruktur (Next.js App Router)
 
 ## Fitur
 
+- **Login (auth demo)** — username + password. Password di-hash (scrypt), session via JWT di cookie HTTP-only. Semua data ter-isolasi per pengguna (`userId` diambil dari session). Akun dibuat lewat seed (default `demo` / `demo1234`); belum ada registrasi mandiri.
 - **Profil Finansial** — gate wajib: pemasukan bulanan, pengeluaran bulanan, dan tabungan saat ini. Tanpa profil ini, cakupan Investasi & Planner terkunci.
 - **Tujuan Aktif (Active Goal)** — satu tujuan keuangan tersentralisasi (nama opsional + nominal target + jangka waktu **dalam bulan**), dikelola dari dashboard, dan dipakai bersama oleh Investasi & Planner. Tujuan aktif = baris `Goal` terbaru ("latest wins").
 - **Cakupan Investasi** — dari tujuan + profil risiko (survei singkat) → rekomendasi alokasi berbasis aturan (matriks Horizon × Profil Risiko) + kontribusi bulanan (Future Value of Annuity). Angka bersifat deterministik, bukan hasil LLM.
 - **Cakupan Planner (goal-driven)** — masukkan pemasukan + tujuan + jangka waktu → sistem menghitung berapa yang harus ditabung tiap bulan, lalu memecah kebutuhan/keinginan; persentase adalah **output**, bukan input. Ada peringatan kelayakan (feasibility) saat target terlalu berat.
-- **Chatbot pelengkap** — konsultasi naratif berbasis Gemini (streaming) via drawer geser dari kanan, tersedia di semua halaman.
+- **Chatbot pelengkap** — konsultasi naratif berbasis Gemini (streaming) via drawer geser dari kanan, tersedia di semua halaman. Wajib login + dibatasi kuota harian per pengguna (`CHAT_DAILY_LIMIT`, default 30) → `429` bila habis.
+- **Analitik funnel** — event `profile_completed` / `goal_set` / `recommendation_generated` / `budget_computed` / `consultant_contact_clicked` / `chat_opened` dicatat per pengguna (server-side di route + klien via `POST /api/events`) untuk mengukur konversi.
 
 Investasi & Planner **memprefill** target/jangka waktu dari Tujuan Aktif; pengguna boleh menimpa nilai sebagai skenario satu kali tanpa mengubah tujuan tersimpan.
 
@@ -44,6 +46,9 @@ Investasi & Planner **memprefill** target/jangka waktu dari Tujuan Aktif; penggu
    ```
    - `GEMINI_API_KEY` — key dari Google AI Studio (jangan pakai prefix `NEXT_PUBLIC_`).
    - `GEMINI_MODEL` — opsional, default `gemini-flash-lite-latest` (alternatif `gemini-flash-latest`).
+   - `AUTH_SECRET` — **wajib** (min. 16 karakter acak) untuk menandatangani JWT session auth. Buat dengan `openssl rand -hex 32`.
+   - `SEED_USERNAME` / `SEED_PASSWORD` — opsional, kredensial akun demo yang dibuat `npm run db:seed` (default `demo` / `demo1234`).
+   - `CHAT_DAILY_LIMIT` — opsional, batas pesan chat AI per pengguna per hari (default `30`).
    - `DATABASE_URL` — koneksi Supabase **pooled** (PgBouncer, port `6543`, akhiri `?pgbouncer=true&sslmode=require&uselibpqcompat=true`); dipakai runtime aplikasi melalui driver adapter `@prisma/adapter-pg`.
    - `DIRECT_URL` — koneksi Supabase **langsung** (port `5432`); dipakai Prisma untuk migrasi.
 
@@ -69,6 +74,14 @@ Investasi & Planner **memprefill** target/jangka waktu dari Tujuan Aktif; penggu
    > psql "<direct-url>?sslmode=require" -f schema.sql
    > ```
 
+4. **Buat akun demo (seed)**
+
+   Auth tidak punya registrasi mandiri — akun dibuat lewat seed:
+   ```bash
+   npm run db:seed
+   ```
+   Membuat akun **`demo` / `demo1234`** (atau sesuai `SEED_USERNAME`/`SEED_PASSWORD`) dan mengadopsi baris data lama (`userId = null`) ke akun tersebut. Idempoten — aman dijalankan ulang. Login di `/login`.
+
 ## Menjalankan
 
 ```bash
@@ -85,21 +98,26 @@ npm run lint     # lint
 
 ```text
 app/
-  api/            # route: profile, goal, recommendation, budget, chat
+  api/            # route: auth (login/logout), profile, goal, recommendation, budget, chat, events
+  login/          # halaman login (auth demo)
   investment/     # cakupan Investasi (goal > survei > rekomendasi)
   planner/        # cakupan Planner (goal-driven)
   profile/        # form profil finansial
-  page.tsx        # dashboard (kartu Tujuan Aktif + navigasi)
+  page.tsx        # dashboard (kartu Tujuan Aktif + navigasi + logout)
   layout.tsx      # root layout + ChatDrawer
 components/
+  auth/           # LoginForm, LogoutButton
   goal/           # ActiveGoalCard, GoalEditor
   investment/     # GoalForm, RiskSurvey, RecommendationCard, InvestmentWizard
   planner/        # BudgetForm, BudgetResultCard, PlannerWizard
   Chat*.tsx       # drawer + interface chatbot
 lib/
   db.ts           # Prisma singleton
-  goal.ts         # getActiveGoal()
-  profileGate.ts  # getLatestProfile()
+  auth/           # password (scrypt), jwt (HS256), session (cookie helpers)
+  analytics/      # events (nama kanonik), track (server), client (klien)
+  chat/           # usage (rate limit harian chat AI)
+  goal.ts         # getActiveGoal(userId)
+  profileGate.ts  # getLatestProfile(userId)
   investment/     # allocation, projection, riskScoring (pure functions)
   planner/        # goalBudget (aktif); presets/budget/savingsProjection (dipensiunkan)
   format/         # rupiahInput
@@ -121,5 +139,5 @@ prisma/           # schema + migrations
 ## Catatan
 
 - Rekomendasi angka (alokasi & kontribusi) bersifat **rule-based dan deterministik**, bukan hasil LLM. Chatbot AI hanya untuk konsultasi naratif.
-- Field `userId` (nullable) sudah ada di semua model sebagai placeholder autentikasi masa depan; MVP tidak memakai auth.
+- Auth demo (username + password, JWT cookie) sudah aktif: data ter-isolasi per `userId` (diambil dari session). Belum ada registrasi mandiri/reset password/rate limiting — akun dibuat lewat seed.
 - Aplikasi ini bersifat edukatif dan bukan nasihat keuangan profesional.

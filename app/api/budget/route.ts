@@ -6,6 +6,7 @@ import { getActiveGoal } from "@/lib/goal";
 import { computeGoalBudget } from "@/lib/planner/goalBudget";
 import { computeTradeOffs } from "@/lib/planner/tradeoffs";
 import { getCurrentUserId } from "@/lib/auth/session";
+import { trackEvent } from "@/lib/analytics/track";
 import type { GoalBudgetResult } from "@/types/planner";
 
 export const runtime = "nodejs";
@@ -217,6 +218,12 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
+
+  await trackEvent(userId, "budget_computed", {
+    targetAmount,
+    horizonMonths,
+    severity: result.feasibility.severity,
+  });
 
   // 4. Sukses → GoalBudgetResult penuh.
   return NextResponse.json(result, { status: 200 });

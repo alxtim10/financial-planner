@@ -13,6 +13,7 @@ import {
 } from "@/lib/investment/projection";
 import type { AllocationSlice, InvestmentProjection } from "@/types/finance";
 import { getCurrentUserId } from "@/lib/auth/session";
+import { trackEvent } from "@/lib/analytics/track";
 
 export const runtime = "nodejs";
 
@@ -192,6 +193,12 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
+
+  await trackEvent(userId, "recommendation_generated", {
+    riskProfile: profile,
+    annualReturn,
+    monthlyContribution,
+  });
 
   // 6. Sukses. Field lama tetap ada (backward-compatible) + `projection` detail.
   return NextResponse.json(

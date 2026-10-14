@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth/session";
+import { trackEvent } from "@/lib/analytics/track";
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,8 @@ export async function POST(req: Request) {
         userId,
       },
     });
+
+    await trackEvent(userId, "profile_completed");
 
     return NextResponse.json(
       {
