@@ -14,6 +14,7 @@
 **Fokus MVP: cakupan Investasi (Investment scope) saja.** Alur berpandu membawa pengguna dari kondisi keuangan mereka menuju rekomendasi alokasi investasi yang konkret dan proyeksi kontribusi bulanan.
 
 ### Alur inti MVP
+0. **Login** (gate autentikasi): pengguna masuk dengan username + password (auth demo; akun dibuat lewat seed, lihat §3.1). Tanpa login, semua halaman mengarahkan ke `/login` dan API membalas `401`.
 1. **Profil Finansial** (gate wajib): pengguna mengisi pemasukan bulanan, pengeluaran bulanan, dan tabungan saat ini. Field pengeluaran diberi catatan agar menyertakan utang/angsuran dan membagi rata pengeluaran non-bulanan (mis. pajak kendaraan tahunan ÷ 12). Tanpa profil ini, cakupan Investasi terkunci.
 2. **Tujuan (Goal):** nominal target + jangka waktu **dalam bulan** (mis. Rp 100.000.000 dalam 60 bulan). Horizon diturunkan dari jangka waktu.
 3. **Profil Risiko:** survei singkat → skor → klasifikasi `Konservatif` / `Moderat` / `Agresif`.
@@ -78,6 +79,10 @@ DATABASE_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pool
 DIRECT_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres"
 ```
 - Datasource Prisma memakai `url = env("DATABASE_URL")` (pooled) + `directUrl = env("DIRECT_URL")` (langsung untuk migrasi).
+- **Auth demo** butuh `AUTH_SECRET` (wajib, min. 16 karakter — penandatangan JWT session). Opsional `SEED_USERNAME`/`SEED_PASSWORD` untuk kredensial akun demo (default `demo`/`demo1234`).
+- **Rate limit chat** opsional `CHAT_DAILY_LIMIT` (batas harian plan free; default 30) + `CHAT_DAILY_LIMIT_PRO` (batas harian plan pro; default 500).
+- **Uji harga** opsional `PRO_PRICE_MONTHLY` (default 39.000) + `PRO_PRICE_YEARLY_PER_MONTH` (default 29.000) — harga ilustratif plan Pro di `/upgrade`.
+- **Dashboard analitik** opsional `ADMIN_USERNAME` (username yang boleh akses `/admin/analytics`; kosong = semua pengguna login dianggap admin saat demo).
 - String koneksi diambil dari Supabase Dashboard → Project Settings → Database → Connection string; ganti `[PROJECT-REF]`, `[PASSWORD]`, `[REGION]`.
 - Skema & tabel dibuat lewat Prisma `migrate deploy` (produksi) / `migrate dev` (pengembangan) — bukan `createdb` lokal lagi.
 - Bila koneksi gagal karena kredensial/izin, hentikan dan konfirmasi ke pemilik proyek — jangan memaksa.
@@ -86,17 +91,71 @@ DIRECT_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler
 
 ## 3. Model Data
 
-Lima model Prisma. Semua menyertakan `userId` **nullable** sebagai placeholder autentikasi masa depan (MVP tidak memakai auth).
+Sembilan model Prisma. Model data keuangan menyertakan `userId` (kolom DB tetap nullable agar migrasi aditif aman), tetapi **sejak fitur auth demo, runtime SELALU mengisi `userId` dari session** dan **semua pembacaan difilter `where: { userId }`** — tidak ada lagi state global yang dibagikan antar-pengguna.
 
 | Model | Field inti | Peran |
 |---|---|---|
+| `User` | `username` (unik), `passwordHash`, `plan` | Akun login (auth demo). Password di-hash scrypt. `plan` = `"free"`\|`"pro"` (default `free`) untuk entitlement. |
 | `FinancialProfile` | `income`, `expense`, `currentSavings` | Sumber kebenaran kondisi keuangan; gate wajib. |
 | `Goal` | `name?`, `targetAmount`, `horizonMonths` | Tujuan Aktif: nama opsional + target + jangka waktu (bulan); sumber Horizon. |
 | `RiskAssessment` | `answers`, `score`, `profile` | Hasil survei risiko + klasifikasi. |
 | `InvestmentRecommendation` | `goalId?`, `riskProfile`, `composition` (Json), `annualReturn`, `monthlyContribution` | Rekomendasi akhir yang dipersistensi. |
 | `BudgetPlan` | `presetId`, `baseAmount`, `mode`, `savingsTargetAmount?`, `savingsHorizonMonths?`, `breakdown` (Json) | Rencana anggaran goal-driven (Planner). Beberapa kolom lama (`manualSavingsTarget`, `includeSavings`, `investmentContribution`) dipensiunkan tetapi dipertahankan. |
+| `ChatUsage` | `userId`, `day`, `count` | Kuota harian chat AI per pengguna (rate limiting). Unik per `(userId, day)`. `day` = `"YYYY-MM-DD"` UTC. |
+| `AnalyticsEvent` | `userId`, `event`, `metadata?` (Json) | Event funnel (profil → tujuan → rekomendasi → konsultan/chat). |
+| `Booking` | `userId`, `consultantId`, `message?`, `snapshot?` (Json), `status` | Lead permintaan konsultasi ke konsultan (marketplace). Konsultan sendiri tetap data statis. |
 
-`FinancialProfile` adalah model terpusat: fitur roadmap (Planner, integrasi chatbot) akan membacanya sebagai konteks pengguna.
+`FinancialProfile` adalah model terpusat: Planner dan integrasi chatbot membacanya sebagai konteks pengguna (kini ter-scope per `userId`).
+
+### 3.2 Rate limiting chat AI (ChatUsage)
+
+Chat AI dibatasi **per pengguna per hari** agar biaya Gemini terkendali & mencegah abuse. Hitungan disimpan di DB (`ChatUsage`), bukan in-memory, agar konsisten lintas instance runtime.
+
+- Batas harian dari env `CHAT_DAILY_LIMIT` (default **30**; nilai `≤ 0`/invalid jatuh ke default). Helper di `lib/chat/usage.ts` (`dailyLimit`, `todayKey` UTC, `getUsageStatus`, `incrementUsage` upsert atomik).
+- `POST /api/chat` kini **wajib login** (`401` bila belum). Bila kuota habis → **`429`** dengan pesan ramah ID (tanpa memanggil Gemini). Hitungan `+1` **hanya setelah sesi stream berhasil dimulai** (init gagal tidak memakan kuota); increment bersifat fire-and-forget (kegagalan hanya di-log).
+
+### 3.3 Analitik funnel (AnalyticsEvent)
+
+Instrumentasi funnel untuk mengukur niat-ke-konversi (metrik kunci dari analisis bisnis). Event ter-scope `userId` dari session.
+
+- Nama event kanonik (`lib/analytics/events.ts`): `profile_completed`, `goal_set`, `recommendation_generated`, `budget_computed`, `consultant_contact_clicked`, `consultant_booking_requested`, `chat_opened`, `upgrade_clicked`.
+- **Server-side** (dicatat langsung di route via `lib/analytics/track.ts` → `trackEvent`, fire-and-forget): `profile_completed`, `goal_set`, `recommendation_generated`, `budget_computed`.
+- **Client-side** (via `POST /api/events` → `lib/analytics/client.ts` → `trackClientEvent`, `fetch keepalive`): `consultant_contact_clicked` (tombol kontak konsultan), `chat_opened` (drawer chat dibuka).
+- `POST /api/events`: tanpa login → `401`; nama event di luar daftar kanonik → `400`; sukses → `204`. Pencatatan tidak boleh memblokir UX.
+
+**Dashboard analitik (pemilik produk).** Halaman `/admin/analytics` (`app/admin/analytics/page.tsx`, server) mengagregasi `AnalyticsEvent` **lintas semua pengguna** lewat pure function `computeFunnel` (`lib/analytics/funnel.ts`): pengguna unik per tahap funnel (`profile_completed → goal_set → recommendation_generated`) + conversion rate antar tahap, metrik "niat" (anggaran dihitung, klik konsultan, buka chat), dan total kejadian per event. Agregasi dilakukan di memori (volume demo kecil; bila besar → ganti `COUNT(DISTINCT)` SQL, pure function tetap jadi kontrak).
+
+**Gate admin.** Halaman wajib login lalu dibatasi `isAdmin(username)` (`lib/auth/session.ts`): bila env `ADMIN_USERNAME` diset, hanya username itu; bila kosong, semua pengguna login dianggap admin (cukup untuk demo — perketat sebelum produksi, idealnya kolom role di `User`). Kartu nav "Analitik Funnel" di dashboard hanya tampil untuk admin.
+
+### 3.4 Entitlement free/pro (monetisasi)
+
+Fondasi freemium untuk menguji minat berbayar sebelum memasang pembayaran. Sumber kebenaran tunggal di `lib/billing/plan.ts` (`isPro`, `normalizePlan`, `chatDailyLimit(plan)`, `PRO_FEATURES`).
+
+- **Plan:** `User.plan` (`"free"` default | `"pro"`).
+- **Yang digate ke Pro** (fitur yang sudah ada, bukan fitur baru):
+  - **Kuota chat lebih besar:** free pakai `CHAT_DAILY_LIMIT` (default 30), Pro pakai `CHAT_DAILY_LIMIT_PRO` (default 500). `getUsageStatus(userId, plan)` memakai batas sesuai plan; `429` untuk free menambah ajakan upgrade.
+  - **Proyeksi investasi detail:** `POST /api/recommendation` mengunci `projection.perInstrument` untuk free (`perInstrument: []` + `perInstrumentLocked: true`); nilai inti (alokasi + setoran bulanan + ringkasan FV/pertumbuhan) tetap gratis. Pro menerima breakdown penuh. Respons menyertakan field `plan`.
+- **Halaman `/upgrade`** (`app/upgrade/page.tsx`): menjelaskan benefit (`PRO_FEATURES`) + perbandingan kuota, dengan tombol upgrade. Dashboard menampilkan badge "Pro" atau tautan "Upgrade Pro".
+- **`POST /api/billing/upgrade` = STUB DEMO:** mencatat event `upgrade_clicked` lalu menyetel `plan = "pro"` langsung untuk pengguna login. **Pada produksi WAJIB diganti** callback payment gateway (Midtrans/Xendit) terverifikasi — jangan naikkan plan hanya dari permintaan klien. Belum ada integrasi pembayaran.
+- **Uji harga (price testing):** `/upgrade` menampilkan tier harga Free vs Pro (toggle bulanan/tahunan) dari `lib/billing/pricing.ts`. Harga **ilustratif**, disetel via env `PRO_PRICE_MONTHLY` (default 39.000) & `PRO_PRICE_YEARLY_PER_MONTH` (default 29.000). Dikombinasikan dengan event `upgrade_clicked` untuk menguji willingness-to-pay sebelum memasang pembayaran.
+
+### 3.5 Marketplace konsultan (lead capture)
+
+Direktori konsultan kini menangkap **lead** permintaan konsultasi (bukan sekadar tautan eksternal). Konsultan sendiri tetap data statis (`lib/consultants.ts`); yang dipersistensi adalah `Booking`.
+
+- **`POST /api/bookings`** (wajib login → `401`): validasi `consultantId` terhadap daftar statis (`400` bila tak dikenal), `message` opsional (dipangkas 1000 char), dan `includeSnapshot` opsional. Bila `includeSnapshot: true`, sistem menyertakan ringkasan Financial Twin (**hanya profil + tujuan milik pengguna sendiri**, atas izin) ke `Booking.snapshot`. Mencatat event `consultant_booking_requested`. Sukses → `201 { id, status }`.
+- **UI** (`components/consultant/BookingRequest.tsx`): tombol "Minta konsultasi" membuka form (pesan + checkbox izin snapshot) di tiap kartu konsultan; tombol "Hubungi" eksternal tetap ada.
+- **Status lead:** `Booking.status` (`requested` default | `contacted` | `closed`) untuk tindak lanjut manual. Belum ada panel admin daftar booking.
+
+### 3.1 Autentikasi (auth demo — username + password)
+
+Auth sederhana untuk demo app, tanpa dependency tambahan (hanya Node `crypto`):
+
+- **Kredensial:** username + password. Password disimpan sebagai hash **scrypt** (`lib/auth/password.ts`, format `scrypt$salt$hash`, verifikasi waktu-konstan).
+- **Session:** **JWT HS256** ditandatangani HMAC dengan `AUTH_SECRET`, disimpan di **cookie HTTP-only** `session` (`SameSite=Lax`, `Secure` di produksi, TTL 7 hari). Helper di `lib/auth/jwt.ts` (`signSession`/`verifySession`) & `lib/auth/session.ts` (`setSessionCookie`/`clearSessionCookie`/`getCurrentUserId`/`requireUserId`). Stateless — tanpa tabel session.
+- **Isolasi data:** semua API route (`/api/profile`, `/api/goal`, `/api/recommendation`, `/api/budget`) mengambil `userId` **dari session**, bukan dari body (body `userId` dihapus — dulu bisa dipalsukan klien). Pembacaan server-side (`getLatestProfile(userId)`, `getActiveGoal(userId)`, `getFinancialTwinContext()`) difilter per `userId`. Tanpa session → API balas `401`, halaman redirect ke `/login`.
+- **Tanpa registrasi mandiri:** akun dibuat lewat **seed** (`prisma/seed.ts`). Default `demo` / `demo1234` (dapat diubah via env `SEED_USERNAME`/`SEED_PASSWORD`). Seed juga **mengadopsi baris data lama** (`userId = null`) ke akun demo agar tetap terlihat setelah login.
+- **Batas (disengaja, karena demo):** belum ada registrasi mandiri, reset password, rate limiting login, atau CSRF token khusus.
 
 ---
 
@@ -202,7 +261,9 @@ Keputusan cakupan (final):
 Chatbot membaca konteks pengguna untuk konsultasi yang personal. **Kontrak data yang akan dikonsumsi:** `FinancialProfile` (income/expense/savings) + `InvestmentRecommendation` (komposisi, return, kontribusi bulanan) disuntikkan sebagai konteks ke prompt, sehingga jawaban chatbot selaras dengan rencana investasi pengguna.
 
 ### 5.3 Autentikasi
-Field `userId` (nullable) sudah ada di semua model sejak awal, sehingga penambahan auth tidak memerlukan migrasi skema besar.
+**Sudah terimplementasi (auth demo).** Lihat §3.1. Field `userId` (nullable) yang sudah ada di semua model sejak awal membuat penambahan auth bersifat aditif — hanya menambah model `User`, tanpa migrasi destruktif. Runtime kini mengisi `userId` dari session dan memfilter semua query per pengguna.
+
+**Peningkatan ke level produksi (belum):** registrasi mandiri, reset password, rate limiting login, proteksi CSRF, dan rotasi `AUTH_SECRET`.
 
 ### Prinsip ekstensibilitas
 Semua logika investasi berada di `lib/investment/*` sebagai **pure function** yang dapat diimpor independen (tanpa dependensi UI/API/DB). Ini memastikan Planner dan integrasi chatbot dapat memakai ulang mesin aturan dan kalkulator proyeksi. Cakupan Planner mengikuti pola yang sama: logika penganggaran murni berada di `lib/planner/*` (aktif: `goalBudget.ts`; dipensiunkan: `presets.ts`/`budget.ts`/`savingsProjection.ts`), hanya mengimpor tipe dari `@/types/planner`.

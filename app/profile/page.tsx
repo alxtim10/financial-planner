@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { redirect } from "next/navigation";
 import ProfileForm from "@/components/profile/ProfileForm";
 import EmergencyFundCard from "@/components/profile/EmergencyFundCard";
 import { getLatestProfile } from "@/lib/profileGate";
+import { getCurrentUserId } from "@/lib/auth/session";
 
 // Halaman ini membaca Financial_Profile dari DB (Prisma) saat request untuk
 // menampilkan indikator dana darurat; paksa render dinamis.
@@ -20,7 +22,10 @@ export const metadata = {
  * indikator kesiapan dana darurat (Requirement 3.1).
  */
 export default async function ProfilePage() {
-  const profile = await getLatestProfile();
+  const userId = await getCurrentUserId();
+  if (!userId) redirect("/login");
+
+  const profile = await getLatestProfile(userId);
 
   return (
     <div className="min-h-dvh bg-background">

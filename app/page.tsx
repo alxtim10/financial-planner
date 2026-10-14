@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   ArrowRight,
+  BarChart3,
   LineChart,
   MessageCircle,
   PieChart,
@@ -13,8 +15,12 @@ import {
 } from "lucide-react";
 import { getLatestProfile } from "@/lib/profileGate";
 import { getActiveGoal } from "@/lib/goal";
+import { getCurrentUserId, isAdmin } from "@/lib/auth/session";
+import { isPro } from "@/lib/billing/plan";
+import { prisma } from "@/lib/db";
 import ActiveGoalCard from "@/components/goal/ActiveGoalCard";
 import EmergencyFundCard from "@/components/profile/EmergencyFundCard";
+import LogoutButton from "@/components/auth/LogoutButton";
 
 // Halaman ini membaca Financial_Profile dari DB (Prisma) saat request.
 // Paksa render dinamis agar `next build` tidak mencoba melakukan query DB
@@ -42,9 +48,16 @@ function formatRupiah(value: number): string {
  * pelengkap tersedia lewat tombol di sudut kanan atas (drawer di layout).
  */
 export default async function Home() {
-  const profile = await getLatestProfile();
+  const userId = await getCurrentUserId();
+  if (!userId) redirect("/login");
+
+  const profile = await getLatestProfile(userId);
   const hasProfile = profile !== null;
-  const activeGoal = await getActiveGoal();
+  const activeGoal = await getActiveGoal(userId);
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const admin = isAdmin(user?.username);
+  const pro = isPro(user?.plan);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -52,10 +65,29 @@ export default async function Home() {
           (fixed right-4 top-4, z-30) yang di-mount di app/layout.tsx. */}
       <div className="mx-auto w-full max-w-2xl px-4 py-10 sm:py-14">
         <header className="mb-8 flex flex-col gap-3 pr-16">
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-[var(--accent)]">
-            <Sparkles className="h-3.5 w-3.5" />
-            Perencana keuangan
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-[var(--accent)]">
+              <Sparkles className="h-3.5 w-3.5" />
+              Perencana keuangan
+            </span>
+            <div className="flex items-center gap-2">
+              {pro ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent)] px-2.5 py-1 text-xs font-semibold text-white">
+                  <Sparkles className="h-3 w-3" />
+                  Pro
+                </span>
+              ) : (
+                <Link
+                  href="/upgrade"
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--accent)]/40 bg-accent-soft px-2.5 py-1 text-xs font-medium text-[var(--accent)] transition-colors hover:brightness-105"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Upgrade Pro
+                </Link>
+              )}
+              <LogoutButton />
+            </div>
+          </div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
             Tabungin
           </h1>
@@ -272,6 +304,27 @@ export default async function Home() {
                 </p>
               </div>
             </Link>
+
+            {admin && (
+              <Link
+                href="/admin/analytics"
+                className="group flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 transition-colors hover:bg-surface-hover"
+              >
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-[var(--accent)]">
+                  <BarChart3 className="h-5 w-5" />
+                </span>
+                <div className="flex flex-col gap-1">
+                  <h3 className="flex items-center gap-1.5 text-[0.9375rem] font-semibold text-foreground">
+                    Analitik Funnel
+                    <ArrowRight className="h-3.5 w-3.5 text-muted transition-transform group-hover:translate-x-0.5" />
+                  </h3>
+                  <p className="text-sm leading-relaxed text-muted">
+                    Lihat funnel pengguna dan konversi antar tahap (khusus
+                    pemilik produk).
+                  </p>
+                </div>
+              </Link>
+            )}
           </div>
         </section>
 

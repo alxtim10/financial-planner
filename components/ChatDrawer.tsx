@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageCircle, X } from "lucide-react";
 import ChatInterface from "@/components/ChatInterface";
+import { trackClientEvent } from "@/lib/analytics/client";
 
 /**
  * ChatDrawer membungkus <ChatInterface /> sebagai panel geser dari kanan.
@@ -36,7 +37,10 @@ export default function ChatDrawer({
   const panelRef = useRef<HTMLDivElement>(null);
 
   const close = useCallback(() => setIsOpen(false), []);
-  const open = useCallback(() => setIsOpen(true), []);
+  const open = useCallback(() => {
+    setIsOpen(true);
+    trackClientEvent("chat_opened");
+  }, []);
 
   // Tutup via Escape; listener dibersihkan saat unmount / saat drawer tertutup.
   useEffect(() => {

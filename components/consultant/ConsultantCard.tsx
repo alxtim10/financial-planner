@@ -1,5 +1,7 @@
 import { MapPin, Star, Briefcase, MessageCircle, Mail, Phone } from "lucide-react";
 import { buildContactHref, contactLabel } from "@/lib/consultants";
+import ContactButton from "@/components/consultant/ContactButton";
+import BookingRequest from "@/components/consultant/BookingRequest";
 import type { FinancialConsultant, ContactMethod } from "@/types/consultant";
 
 interface ConsultantCardProps {
@@ -30,7 +32,7 @@ function initials(name: string): string {
  * (WhatsApp/email/telepon) lewat href. Tidak ada booking/penyimpanan data.
  */
 export default function ConsultantCard({ consultant }: ConsultantCardProps) {
-  const { name, title, specialties, bio, location, experienceYears, rating, contact } =
+  const { id, name, title, specialties, bio, location, experienceYears, rating, contact } =
     consultant;
   const Icon = CONTACT_ICON[contact.method];
   const href = buildContactHref(contact);
@@ -79,15 +81,13 @@ export default function ConsultantCard({ consultant }: ConsultantCardProps) {
         ))}
       </ul>
 
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] text-[0.9375rem] font-medium text-white transition-all duration-200 hover:brightness-110"
-      >
-        <Icon className="h-4 w-4" />
-        {contactLabel(contact.method)}
-      </a>
+      <div className="flex flex-col gap-2">
+        <BookingRequest consultantId={id} consultantName={name} />
+        <ContactButton href={href} consultantId={id} method={contact.method}>
+          <Icon className="h-4 w-4" />
+          {contactLabel(contact.method)}
+        </ContactButton>
+      </div>
     </article>
   );
 }

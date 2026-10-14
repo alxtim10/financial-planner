@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getLatestProfile } from "@/lib/profileGate";
 import { getActiveGoal } from "@/lib/goal";
+import { getCurrentUserId } from "@/lib/auth/session";
 import { evaluateEmergencyFund } from "@/lib/financial/emergencyFund";
 
 /** Format angka Rupiah ke format Indonesia yang rapi */
@@ -17,13 +18,18 @@ function fmt(val: number): string {
  */
 export async function getFinancialTwinContext(): Promise<string> {
   try {
-    const profile = await getLatestProfile();
-    const activeGoal = await getActiveGoal();
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return "\n\n[STATUS DATA PENGGUNA]: Pengguna belum login. Berikan panduan umum tanpa mengasumsikan data keuangan tertentu.";
+    }
+
+    const profile = await getLatestProfile(userId);
+    const activeGoal = await getActiveGoal(userId);
 
     const [latestRisk, latestRec, latestBudget] = await Promise.all([
-      prisma.riskAssessment.findFirst({ orderBy: { createdAt: "desc" } }),
-      prisma.investmentRecommendation.findFirst({ orderBy: { createdAt: "desc" } }),
-      prisma.budgetPlan.findFirst({ orderBy: { createdAt: "desc" } }),
+      prisma.riskAssessment.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } }),
+      prisma.investmentRecommendation.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } }),
+      prisma.budgetPlan.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } }),
     ]);
 
     if (!profile && !activeGoal && !latestRisk && !latestBudget) {

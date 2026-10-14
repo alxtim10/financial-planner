@@ -16,6 +16,16 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Auth sederhana untuk demo: username + password (hash scrypt).
+// Session memakai JWT (HMAC) di cookie HTTP-only — tanpa tabel session.
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  plan         String   @default("free") // entitlement: "free" | "pro"
+  createdAt    DateTime @default(now())
+}
+
 model FinancialProfile {
   id             String   @id @default(cuid())
   userId         String? // placeholder auth (nullable di MVP)
@@ -68,4 +78,45 @@ model BudgetPlan {
   includeSavings         Boolean? // apakah tabungan saat ini dihitung sebagai saldo awal (present value)
   breakdown              Json // BudgetLine[] hasil computeBudget
   createdAt              DateTime @default(now())
+}
+
+// Kuota harian chat AI per pengguna (rate limiting). Satu baris per (userId, day).
+// `day` disimpan sebagai string "YYYY-MM-DD" (UTC) agar sederhana & deterministik.
+model ChatUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  day       String
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, day])
+}
+
+// Permintaan konsultasi (lead) ke konsultan keuangan. Konsultan sendiri masih
+// data statis (lib/consultants.ts); yang dipersistensi di sini adalah LEAD-nya.
+// `snapshot` opsional = ringkasan Financial Twin yang disertakan atas izin user.
+model Booking {
+  id           String   @id @default(cuid())
+  userId       String
+  consultantId String
+  message      String?
+  snapshot     Json?
+  status       String   @default("requested") // requested | contacted | closed
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([consultantId])
+}
+
+// Event funnel analitik (profil → tujuan → rekomendasi → konsultan/chat).
+// `metadata` opsional (Json) untuk konteks tambahan per event.
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  event     String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, event])
+  @@index([event, createdAt])
 }

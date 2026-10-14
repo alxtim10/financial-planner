@@ -12,6 +12,9 @@ import {
   projectInvestment,
 } from "@/lib/investment/projection";
 import type { AllocationSlice, InvestmentProjection } from "@/types/finance";
+import { getCurrentUserId } from "@/lib/auth/session";
+import { trackEvent } from "@/lib/analytics/track";
+import { isPro } from "@/lib/billing/plan";
 
 export const runtime = "nodejs";
 
@@ -22,7 +25,6 @@ interface RecommendationBody {
   riskAnswers?: unknown;
   selectedInstruments?: unknown;
   currentSavings?: unknown;
-  userId?: string | null;
 }
 
 /**
@@ -42,6 +44,11 @@ interface RecommendationBody {
  * Requirements: 3.4, 4.1, 5.1, 5.5, 7.1, 7.3
  */
 export async function POST(req: Request) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Silakan login terlebih dahulu." }, { status: 401 });
+  }
+
   let body: RecommendationBody;
   try {
     body = (await req.json()) as RecommendationBody;
@@ -56,7 +63,6 @@ export async function POST(req: Request) {
     riskAnswers,
     selectedInstruments,
     currentSavings,
-    userId = null,
   } = body ?? {};
 
   // 1. Validasi input.
@@ -189,9 +195,30 @@ export async function POST(req: Request) {
     );
   }
 
+  await trackEvent(userId, "recommendation_generated", {
+    riskProfile: profile,
+    annualReturn,
+    monthlyContribution,
+  });
+
+  // Gating entitlement: proyeksi detail per-instrumen hanya untuk Pro. Free
+  // tetap mendapat ringkasan proyeksi (FV, total disetor, pertumbuhan).
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const pro = isPro(user?.plan);
+  const gatedProjection: InvestmentProjection & { perInstrumentLocked?: boolean } = pro
+    ? projection
+    : { ...projection, perInstrument: [], perInstrumentLocked: true };
+
   // 6. Sukses. Field lama tetap ada (backward-compatible) + `projection` detail.
   return NextResponse.json(
-    { riskProfile: profile, composition, annualReturn, monthlyContribution, projection },
+    {
+      riskProfile: profile,
+      composition,
+      annualReturn,
+      monthlyContribution,
+      projection: gatedProjection,
+      plan: pro ? "pro" : "free",
+    },
     { status: 200 },
   );
 }

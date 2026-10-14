@@ -11,8 +11,9 @@ import type { FinancialProfile } from "@prisma/client";
  *
  * Requirements: 1.3, 1.4
  */
-export async function getLatestProfile(): Promise<FinancialProfile | null> {
+export async function getLatestProfile(userId: string): Promise<FinancialProfile | null> {
   return prisma.financialProfile.findFirst({
+    where: { userId },
     orderBy: { createdAt: "desc" },
   });
 }

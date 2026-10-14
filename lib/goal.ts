@@ -11,8 +11,9 @@ import type { Goal } from "@prisma/client";
  *
  * Requirements: 3.2, 3.3
  */
-export async function getActiveGoal(): Promise<Goal | null> {
+export async function getActiveGoal(userId: string): Promise<Goal | null> {
   return prisma.goal.findFirst({
+    where: { userId },
     orderBy: { createdAt: "desc" },
   });
 }
