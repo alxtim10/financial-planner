@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   ArrowRight,
   LineChart,
@@ -13,8 +14,10 @@ import {
 } from "lucide-react";
 import { getLatestProfile } from "@/lib/profileGate";
 import { getActiveGoal } from "@/lib/goal";
+import { getCurrentUserId } from "@/lib/auth/session";
 import ActiveGoalCard from "@/components/goal/ActiveGoalCard";
 import EmergencyFundCard from "@/components/profile/EmergencyFundCard";
+import LogoutButton from "@/components/auth/LogoutButton";
 
 // Halaman ini membaca Financial_Profile dari DB (Prisma) saat request.
 // Paksa render dinamis agar `next build` tidak mencoba melakukan query DB
@@ -42,9 +45,12 @@ function formatRupiah(value: number): string {
  * pelengkap tersedia lewat tombol di sudut kanan atas (drawer di layout).
  */
 export default async function Home() {
-  const profile = await getLatestProfile();
+  const userId = await getCurrentUserId();
+  if (!userId) redirect("/login");
+
+  const profile = await getLatestProfile(userId);
   const hasProfile = profile !== null;
-  const activeGoal = await getActiveGoal();
+  const activeGoal = await getActiveGoal(userId);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -52,10 +58,13 @@ export default async function Home() {
           (fixed right-4 top-4, z-30) yang di-mount di app/layout.tsx. */}
       <div className="mx-auto w-full max-w-2xl px-4 py-10 sm:py-14">
         <header className="mb-8 flex flex-col gap-3 pr-16">
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-[var(--accent)]">
-            <Sparkles className="h-3.5 w-3.5" />
-            Perencana keuangan
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-[var(--accent)]">
+              <Sparkles className="h-3.5 w-3.5" />
+              Perencana keuangan
+            </span>
+            <LogoutButton />
+          </div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
             Tabungin
           </h1>

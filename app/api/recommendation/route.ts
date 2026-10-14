@@ -12,6 +12,7 @@ import {
   projectInvestment,
 } from "@/lib/investment/projection";
 import type { AllocationSlice, InvestmentProjection } from "@/types/finance";
+import { getCurrentUserId } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
@@ -22,7 +23,6 @@ interface RecommendationBody {
   riskAnswers?: unknown;
   selectedInstruments?: unknown;
   currentSavings?: unknown;
-  userId?: string | null;
 }
 
 /**
@@ -42,6 +42,11 @@ interface RecommendationBody {
  * Requirements: 3.4, 4.1, 5.1, 5.5, 7.1, 7.3
  */
 export async function POST(req: Request) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Silakan login terlebih dahulu." }, { status: 401 });
+  }
+
   let body: RecommendationBody;
   try {
     body = (await req.json()) as RecommendationBody;
@@ -56,7 +61,6 @@ export async function POST(req: Request) {
     riskAnswers,
     selectedInstruments,
     currentSavings,
-    userId = null,
   } = body ?? {};
 
   // 1. Validasi input.

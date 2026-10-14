@@ -5,6 +5,7 @@ import { getLatestProfile } from "@/lib/profileGate";
 import { getActiveGoal } from "@/lib/goal";
 import { computeGoalBudget } from "@/lib/planner/goalBudget";
 import { computeTradeOffs } from "@/lib/planner/tradeoffs";
+import { getCurrentUserId } from "@/lib/auth/session";
 import type { GoalBudgetResult } from "@/types/planner";
 
 export const runtime = "nodejs";
@@ -14,7 +15,6 @@ interface BudgetBody {
   monthlyExpense?: unknown;
   targetAmount?: unknown;
   horizonMonths?: unknown;
-  userId?: string | null;
 }
 
 /**
@@ -38,11 +38,17 @@ interface BudgetBody {
  * Requirements: 8.1, 8.2, 9.2, 9.4, 21.2, 21.8
  */
 export async function GET() {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Silakan login terlebih dahulu." }, { status: 401 });
+  }
+
   try {
-    const profile = await getLatestProfile();
-    const active = await getActiveGoal();
+    const profile = await getLatestProfile(userId);
+    const active = await getActiveGoal(userId);
 
     const latestPlan = await prisma.budgetPlan.findFirst({
+      where: { userId },
       orderBy: { createdAt: "desc" },
     });
 
@@ -70,7 +76,7 @@ export async function GET() {
 /**
  * POST /api/budget — hitung + simpan rencana anggaran goal-driven.
  *
- * Body: { monthlyIncome, targetAmount, horizonMonths, userId? }
+ * Body: { monthlyIncome, targetAmount, horizonMonths } — userId dari session.
  *
  * Validasi (→ 400, pesan ramah Bahasa Indonesia):
  *   - monthlyIncome angka berhingga > 0.
@@ -96,6 +102,11 @@ export async function GET() {
  * Requirements: 21.3, 21.4, 21.5, 21.6, 21.7, 21.8
  */
 export async function POST(req: Request) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Silakan login terlebih dahulu." }, { status: 401 });
+  }
+
   let body: BudgetBody;
   try {
     body = (await req.json()) as BudgetBody;
@@ -108,7 +119,6 @@ export async function POST(req: Request) {
     monthlyExpense,
     targetAmount,
     horizonMonths,
-    userId = null,
   } = body ?? {};
 
   // Validasi input (→ 400).
@@ -149,7 +159,7 @@ export async function POST(req: Request) {
 
   // 1. currentSavings dari profil; monthlyExpense diutamakan dari input pengguna
   //    (free input), fallback ke profil bila tidak dikirim.
-  const profile = await getLatestProfile();
+  const profile = await getLatestProfile(userId);
   const currentSavings = profile?.currentSavings ?? 0;
   const resolvedMonthlyExpense =
     typeof monthlyExpense === "number" ? monthlyExpense : profile?.expense ?? 0;
@@ -189,7 +199,7 @@ export async function POST(req: Request) {
   try {
     await prisma.budgetPlan.create({
       data: {
-        userId: userId ?? null,
+        userId,
         presetId: "goal",
         baseAmount: monthlyIncome,
         // Kolom `mode` non-null di skema (tanpa migrasi) → tandai "goal".

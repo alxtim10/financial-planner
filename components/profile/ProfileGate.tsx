@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getLatestProfile } from "@/lib/profileGate";
+import { getCurrentUserId } from "@/lib/auth/session";
 
 /**
  * Profile_Gate — guard server-side yang melindungi Investment_Scope.
@@ -32,7 +33,12 @@ export default async function ProfileGate({
 }: {
   children: React.ReactNode;
 }) {
-  const profile = await getLatestProfile();
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    redirect("/login");
+  }
+
+  const profile = await getLatestProfile(userId);
 
   if (!profile) {
     redirect("/profile");

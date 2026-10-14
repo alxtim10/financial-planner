@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getCurrentUserId } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
@@ -7,7 +8,6 @@ interface GoalRequest {
   name?: unknown;
   targetAmount?: unknown;
   horizonMonths?: unknown;
-  userId?: string | null;
 }
 
 /**
@@ -17,6 +17,11 @@ interface GoalRequest {
  * Sukses → 201 { id, name, targetAmount, horizonMonths }.
  */
 export async function POST(req: Request) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Silakan login terlebih dahulu." }, { status: 401 });
+  }
+
   let body: GoalRequest;
   try {
     body = (await req.json()) as GoalRequest;
@@ -24,7 +29,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Permintaan tidak valid." }, { status: 400 });
   }
 
-  const { name: rawName, targetAmount, horizonMonths, userId = null } = body;
+  const { name: rawName, targetAmount, horizonMonths } = body;
 
   // Normalisasi name: bila string → trim, string kosong → null; selain itu null.
   const name = typeof rawName === "string" && rawName.trim() !== "" ? rawName.trim() : null;
@@ -53,7 +58,7 @@ export async function POST(req: Request) {
 
   try {
     const goal = await prisma.goal.create({
-      data: { name, targetAmount, horizonMonths, userId: userId ?? null },
+      data: { name, targetAmount, horizonMonths, userId },
     });
     return NextResponse.json(
       {
@@ -79,8 +84,14 @@ export async function POST(req: Request) {
  * Sukses → 200 { goal: Goal | null }.
  */
 export async function GET() {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Silakan login terlebih dahulu." }, { status: 401 });
+  }
+
   try {
     const goal = await prisma.goal.findFirst({
+      where: { userId },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json({ goal }, { status: 200 });

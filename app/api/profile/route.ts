@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getCurrentUserId } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
@@ -7,7 +8,6 @@ interface ProfileBody {
   income: number;
   expense: number;
   currentSavings: number;
-  userId?: string | null;
 }
 
 /** Angka valid jika berupa number, finite, dan >= 0. */
@@ -21,6 +21,11 @@ function isNonNegativeFinite(value: unknown): value is number {
  * Validasi: income, expense, currentSavings finite dan >= 0.
  */
 export async function POST(req: Request) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Silakan login terlebih dahulu." }, { status: 401 });
+  }
+
   let body: ProfileBody;
   try {
     body = (await req.json()) as ProfileBody;
@@ -28,7 +33,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Permintaan tidak valid." }, { status: 400 });
   }
 
-  const { income, expense, currentSavings, userId } = body ?? {};
+  const { income, expense, currentSavings } = body ?? {};
 
   if (
     !isNonNegativeFinite(income) ||
@@ -47,7 +52,7 @@ export async function POST(req: Request) {
         income,
         expense,
         currentSavings,
-        userId: userId ?? null,
+        userId,
       },
     });
 
@@ -74,8 +79,14 @@ export async function POST(req: Request) {
  * Sukses → 200 { profile: FinancialProfile | null }.
  */
 export async function GET() {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Silakan login terlebih dahulu." }, { status: 401 });
+  }
+
   try {
     const profile = await prisma.financialProfile.findFirst({
+      where: { userId },
       orderBy: { createdAt: "desc" },
     });
 

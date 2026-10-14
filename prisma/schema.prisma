@@ -16,6 +16,15 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Auth sederhana untuk demo: username + password (hash scrypt).
+// Session memakai JWT (HMAC) di cookie HTTP-only — tanpa tabel session.
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
 model FinancialProfile {
   id             String   @id @default(cuid())
   userId         String? // placeholder auth (nullable di MVP)
