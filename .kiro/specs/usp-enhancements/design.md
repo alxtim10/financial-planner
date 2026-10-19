@@ -2,7 +2,7 @@
 
 ## 1. Overview & Architecture
 
-Fitur USP Enhancements menambahkan lapisan kecerdasan terstruktur pada **TabungOne** dengan dua pilar utama:
+Fitur USP Enhancements menambahkan lapisan kecerdasan terstruktur pada **Tabungin** dengan dua pilar utama:
 1. **Algoritma Deterministik Trade-Off:** Memberikan solusi alternatif yang dapat dieksekusi secara instan saat alokasi anggaran mengalami hambatan kelayakan.
 2. **Context-Aware Financial Twin:** Mengintegrasikan memori finansial terpusat ke dalam sistem asisten AI Gemini secara otomatis.
 

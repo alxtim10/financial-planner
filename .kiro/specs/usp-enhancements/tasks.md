@@ -2,7 +2,7 @@
 
 ## Overview
 
-Rencana implementasi ini mengeksekusi fitur pembeda utama (**Unique Selling Point**) untuk **TabungOne**. Task disusun secara modular mengikuti metodologi Kiro: definisi tipe → logika murni berdasar TDD → endpoint API → komponen antarmuka (UI) → verifikasi terintegrasi.
+Rencana implementasi ini mengeksekusi fitur pembeda utama (**Unique Selling Point**) untuk **Tabungin**. Task disusun secara modular mengikuti metodologi Kiro: definisi tipe → logika murni berdasar TDD → endpoint API → komponen antarmuka (UI) → verifikasi terintegrasi.
 
 ---
 

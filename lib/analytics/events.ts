@@ -12,6 +12,7 @@ export const ANALYTICS_EVENTS = [
   "consultant_booking_requested", // kirim permintaan konsultasi (lead)
   "chat_opened", // drawer chat AI dibuka
   "upgrade_clicked", // klik tombol upgrade ke Pro (uji minat)
+  "partner_placement_clicked", // klik tawaran partner (placement kontekstual)
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];

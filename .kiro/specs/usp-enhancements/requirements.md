@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Dokumen ini mendefinisikan spesifikasi formal untuk peningkatan **Unique Selling Point (USP)** pada aplikasi **TabungOne**. Peningkatan ini berfokus pada dua diferensiasi utama yang membedakan TabungOne dari aplikasi pencatat keuangan maupun robo-advisor konvensional:
+Dokumen ini mendefinisikan spesifikasi formal untuk peningkatan **Unique Selling Point (USP)** pada aplikasi **Tabungin**. Peningkatan ini berfokus pada dua diferensiasi utama yang membedakan Tabungin dari aplikasi pencatat keuangan maupun robo-advisor konvensional:
 
 1. **Trade-Off Feasibility Optimizer (Deterministik):** Mengubah evaluasi kelayakan anggaran dari sekadar pesan peringatan pasif (`tight` / `impossible`) menjadi mesin rekomendasi aksi nyata dengan 3 solusi komparatif yang dapat diterapkan secara instan dengan 1 klik.
 2. **Context-Aware Financial Twin (AI Copilot):** Mengubah asisten AI (ChatDrawer) dari chatbot tanya-jawab generik menjadi asisten perencana keuangan cerdas yang secara otomatis membaca seluruh snapshot data pengguna (Profil Finansial, Tujuan Aktif, Profil Risiko, dan Rencana Anggaran) tanpa mengharuskan pengguna mengetik ulang data mereka.
@@ -58,7 +58,7 @@ Dokumen ini mendefinisikan spesifikasi formal untuk peningkatan **Unique Selling
   - SISTEM HARUS memformat data tersebut ke dalam blok *System Instruction* Gemini secara terstruktur.
 
 #### 2.2 Persona & Batasan AI Copilot
-- Asisten AI HARUS mengadopsi persona **TabungOne** yang hangat, profesional, objektif, dan mengacu pada angka data pengguna yang tersedia.
+- Asisten AI HARUS mengadopsi persona **Tabungin** yang hangat, profesional, objektif, dan mengacu pada angka data pengguna yang tersedia.
 - Asisten AI TIDAK BOLEH mengubah kalkulasi matematis deterministik yang telah dihasilkan oleh sistem, melainkan memberikan saran strategi, edukasi mitigasi, atau rekomendasi kebiasaan (*behavioral nudge*).
 - Asisten AI HARUS selalu menyertakan disclaimer edukatif dan tidak memberikan jaminan keuntungan investasi tertentu.
 
@@ -86,4 +86,4 @@ Dokumen ini mendefinisikan spesifikasi formal untuk peningkatan **Unique Selling
 ## Out of Scope (Untuk Iterasi Lanjutan)
 - Multi-user authentication & OAuth login (tetap nullable `userId` untuk kesiapan auth).
 - Parsing otomatis mutasi PDF e-statement (masuk ke roadmap Fase 3).
-- Eksekusi transaksi pembelian reksadana/saham langsung (TabungOne adalah perencana dan penasihat edukatif murni).
+- Eksekusi transaksi pembelian reksadana/saham langsung (Tabungin adalah perencana dan penasihat edukatif murni).

@@ -10,12 +10,16 @@ import {
   Wallet,
   Sprout,
   Target,
+  ExternalLink,
 } from "lucide-react";
 import type {
   AllocationSlice,
   RiskProfile,
   InvestmentProjection,
 } from "@/types/finance";
+import { instrumentToCategory } from "@/lib/investment/allocation";
+import { getPartnerOffers, type PartnerOffer } from "@/lib/partners";
+import { trackClientEvent } from "@/lib/analytics/client";
 
 /**
  * Penjelasan ringkas instrumen investasi untuk pengguna awam.
@@ -132,6 +136,18 @@ export default function RecommendationCard({
     (projection?.perInstrument ?? []).map((p) => [p.instrument, p]),
   );
 
+  // Lacak kategori yang placement partnernya sudah dirender, agar satu kategori
+  // tidak tampil ganda saat ada beberapa slice sekategori.
+  const shownCategories = new Set<string>();
+
+  /** Catat klik placement partner (fire-and-forget, tak mengganggu UX). */
+  function handlePartnerClick(offer: PartnerOffer) {
+    trackClientEvent("partner_placement_clicked", {
+      partnerId: offer.id,
+      category: offer.category,
+    });
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-5 rounded-2xl border border-border bg-surface p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] sm:p-6">
@@ -241,6 +257,15 @@ export default function RecommendationCard({
               const info = findInstrumentInfo(slice.instrument);
               const isOpen = openInfo === slice.instrument;
               const detail = perInstrumentMap.get(slice.instrument);
+              // Placement partner (lapisan terpisah, read-only terhadap engine):
+              // petakan label slice → kategori kanonik → tawaran partner. Dedupe
+              // per kategori agar tak tampil ganda.
+              const category = instrumentToCategory(slice.instrument);
+              let offers: PartnerOffer[] = [];
+              if (category && !shownCategories.has(category)) {
+                offers = getPartnerOffers(category);
+                if (offers.length > 0) shownCategories.add(category);
+              }
               return (
                 <li key={slice.instrument} className="flex flex-col gap-2">
                   <div className="flex items-start justify-between gap-3 text-sm">
@@ -291,6 +316,31 @@ export default function RecommendationCard({
                       </p>
                     </div>
                   )}
+                  {/* Placement partner kontekstual (konten partner, ditandai
+                      jelas). Tidak memengaruhi angka/alokasi di atas. */}
+                  {offers.map((offer) => (
+                    <a
+                      key={offer.id}
+                      href={offer.referralUrl}
+                      target="_blank"
+                      rel="noopener noreferrer sponsored"
+                      onClick={() => handlePartnerClick(offer)}
+                      className="ml-4.5 flex items-start justify-between gap-3 rounded-lg border border-dashed border-border bg-background px-3 py-2.5 transition-colors hover:border-[var(--accent)]/50"
+                    >
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span className="text-xs font-medium text-[var(--accent)]">
+                          {offer.ctaLabel}
+                        </span>
+                        <span className="truncate text-xs text-foreground">
+                          {offer.partnerName} · {offer.productLabel}
+                        </span>
+                        <span className="text-[11px] leading-snug text-muted">
+                          {offer.disclosure}
+                        </span>
+                      </span>
+                      <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />
+                    </a>
+                  ))}
                 </li>
               );
             })}
