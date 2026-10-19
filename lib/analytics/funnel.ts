@@ -28,6 +28,7 @@ export interface FunnelReport {
     consultantBookingUsers: number;
     chatOpenedUsers: number;
     upgradeClickedUsers: number;
+    partnerPlacementUsers: number;
   };
   /** Total kejadian (bukan unik) per nama event. */
   totalsByEvent: Record<AnalyticsEventName, number>;
@@ -45,6 +46,7 @@ const STAGE_LABELS: Record<AnalyticsEventName, string> = {
   consultant_booking_requested: "Minta konsultasi (lead)",
   chat_opened: "Chat dibuka",
   upgrade_clicked: "Klik upgrade Pro",
+  partner_placement_clicked: "Klik tawaran partner",
 };
 
 /** Urutan tahap funnel linear inti. */
@@ -107,6 +109,7 @@ export function computeFunnel(rows: readonly FunnelEventRow[]): FunnelReport {
       consultantBookingUsers: uniqueOf("consultant_booking_requested"),
       chatOpenedUsers: uniqueOf("chat_opened"),
       upgradeClickedUsers: uniqueOf("upgrade_clicked"),
+      partnerPlacementUsers: uniqueOf("partner_placement_clicked"),
     },
     totalsByEvent,
     totalUsers: allUsers.size,

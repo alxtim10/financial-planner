@@ -6,6 +6,7 @@ import {
   MessageCircle,
   Users,
   UserRound,
+  Handshake,
 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUserId, isAdmin } from "@/lib/auth/session";
@@ -68,7 +69,7 @@ export default async function AnalyticsDashboardPage() {
         </header>
 
         {/* Ringkasan atas */}
-        <section className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <section className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             icon={Users}
             label="Total pengguna (ada event)"
@@ -83,6 +84,11 @@ export default async function AnalyticsDashboardPage() {
             icon={MessageCircle}
             label="Buka chat AI"
             value={report.intent.chatOpenedUsers.toLocaleString("id-ID")}
+          />
+          <SummaryCard
+            icon={Handshake}
+            label="Klik tawaran partner"
+            value={report.intent.partnerPlacementUsers.toLocaleString("id-ID")}
           />
         </section>
 
