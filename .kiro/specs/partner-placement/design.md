@@ -100,14 +100,19 @@ klien via `trackClientEvent` (fire-and-forget) dengan metadata
 `{ partnerId, category }`. Tidak boleh menggagalkan UX.
 
 ### 4.3 UI — `RecommendationCard.tsx`
-- Di bawah tiap slice komposisi, bila `getPartnerOffers(kategori-slice)` tak
-  kosong, tampilkan baris kecil "Didukung partner — <ctaLabel>" sebagai link
-  (`target="_blank" rel="noopener noreferrer sponsored"`).
-- Kategori slice diperoleh via `instrumentToCategory(slice.instrument)`.
-- Dedupe: satu kategori hanya memunculkan satu set tawaran meski ada beberapa
-  slice sekategori.
+- Placement dikumpulkan dalam **SATU blok terpisah** di bawah kartu
+  rekomendasi (kartu bergaris putus-putus berjudul "Konten partner"),
+  **bukan** ditempel per-slice persentase. Ini mencegah kesan bahwa angka
+  alokasi mengarah ke produk tertentu (menghindari *perceived bias*, bukan
+  hanya bias teknis).
+- Blok diisi dengan menelusuri kategori instrumen yang **muncul** di komposisi
+  (`instrumentToCategory(slice.instrument)`), dedupe per kategori, lalu
+  `getPartnerOffers(category)`. Read-only terhadap engine.
+- Ada teks eksplisit bahwa tawaran "tidak memengaruhi" perhitungan di atas.
+- Tiap tawaran = link (`target="_blank" rel="noopener noreferrer sponsored"`),
+  bertanda `disclosure`.
 - Klik → `trackClientEvent("partner_placement_clicked", { partnerId, category })`.
-- Ditandai jelas sebagai konten partner; disclaimer global tetap ada.
+- Disclaimer edukatif global tetap ada di bawahnya.
 
 ## 5. Dampak & keamanan
 - Perubahan terbatas: 1 file baru (`lib/partners.ts`), 1 baris event, dan render

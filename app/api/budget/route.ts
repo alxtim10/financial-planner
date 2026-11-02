@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getLatestProfile } from "@/lib/profileGate";
-import { getActiveGoal } from "@/lib/goal";
+import { getActiveGoal, listGoals } from "@/lib/goal";
 import { computeGoalBudget } from "@/lib/planner/goalBudget";
 import { computeTradeOffs } from "@/lib/planner/tradeoffs";
+import { aggregateGoals } from "@/lib/investment/multiGoal";
 import { getCurrentUserId } from "@/lib/auth/session";
 import { trackEvent } from "@/lib/analytics/track";
 import type { GoalBudgetResult } from "@/types/planner";
+import type { GoalInput } from "@/types/finance";
 
 export const runtime = "nodejs";
 
@@ -16,6 +18,52 @@ interface BudgetBody {
   monthlyExpense?: unknown;
   targetAmount?: unknown;
   horizonMonths?: unknown;
+  // Multi-tujuan: daftar tujuan terpilih. Bila ada (non-kosong), target &
+  // horizon diturunkan dari agregasi (opsi A): target = total, horizon =
+  // rata-rata tertimbang oleh target.
+  goals?: unknown;
+  goalId?: unknown;
+}
+
+/**
+ * Menormalkan `body.goals` menjadi GoalInput[] valid untuk Planner, atau null
+ * bila tidak dikirim / bukan array non-kosong. Mengembalikan pesan error bila
+ * ada elemen tidak valid.
+ */
+function normalizeBudgetGoals(
+  raw: unknown,
+): { goals: GoalInput[] } | { error: string } | null {
+  if (raw === undefined || raw === null) return null;
+  if (!Array.isArray(raw)) return { error: "Daftar tujuan harus berupa array." };
+  if (raw.length === 0) return null;
+
+  const goals: GoalInput[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) {
+      return { error: "Setiap tujuan harus berupa objek." };
+    }
+    const g = item as Record<string, unknown>;
+    const targetAmount = g.targetAmount;
+    const horizonMonths = g.horizonMonths;
+    if (typeof targetAmount !== "number" || !Number.isFinite(targetAmount) || targetAmount <= 0) {
+      return { error: "Target dana tiap tujuan harus angka lebih besar dari 0." };
+    }
+    if (
+      typeof horizonMonths !== "number" ||
+      !Number.isFinite(horizonMonths) ||
+      horizonMonths <= 0 ||
+      !Number.isInteger(horizonMonths)
+    ) {
+      return { error: "Jangka waktu tiap tujuan harus bilangan bulat lebih besar dari 0." };
+    }
+    goals.push({
+      id: typeof g.id === "string" ? g.id : undefined,
+      name: typeof g.name === "string" ? g.name : null,
+      targetAmount,
+      horizonMonths,
+    });
+  }
+  return { goals };
 }
 
 /**
@@ -47,6 +95,7 @@ export async function GET() {
   try {
     const profile = await getLatestProfile(userId);
     const active = await getActiveGoal(userId);
+    const goals = await listGoals(userId);
 
     const latestPlan = await prisma.budgetPlan.findFirst({
       where: { userId },
@@ -59,9 +108,17 @@ export async function GET() {
         currentSavings: profile?.currentSavings ?? null,
         monthlyExpense: profile?.expense ?? null,
         latestPlan,
+        // Prefill tunggal (backward-compatible) = tujuan terbaru.
         goalTargetAmount: active?.targetAmount ?? null,
         goalHorizonMonths: active?.horizonMonths ?? null,
         goalName: active?.name ?? null,
+        // Multi-tujuan: daftar semua tujuan untuk pemilih + "Pilih semua".
+        goals: goals.map((g) => ({
+          id: g.id,
+          name: g.name,
+          targetAmount: g.targetAmount,
+          horizonMonths: g.horizonMonths,
+        })),
       },
       { status: 200 },
     );
@@ -120,6 +177,8 @@ export async function POST(req: Request) {
     monthlyExpense,
     targetAmount,
     horizonMonths,
+    goals: rawGoals,
+    goalId,
   } = body ?? {};
 
   // Validasi input (→ 400).
@@ -144,14 +203,47 @@ export async function POST(req: Request) {
     );
   }
 
-  if (typeof targetAmount !== "number" || !Number.isFinite(targetAmount) || targetAmount <= 0) {
-    return NextResponse.json(
-      { error: "Target dana harus berupa angka yang lebih besar dari nol." },
-      { status: 400 },
-    );
+  // Multi-tujuan: bila `goals` dikirim, target & horizon diturunkan dari
+  // agregasi (opsi A) alih-alih dari pasangan tunggal targetAmount/horizonMonths.
+  const normalizedGoals = normalizeBudgetGoals(rawGoals);
+  if (normalizedGoals && "error" in normalizedGoals) {
+    return NextResponse.json({ error: normalizedGoals.error }, { status: 400 });
   }
 
-  if (typeof horizonMonths !== "number" || !Number.isInteger(horizonMonths) || horizonMonths <= 0) {
+  let resolvedTargetAmount: number;
+  let resolvedHorizonMonths: number;
+  let persistedGoalId: string | null = null;
+
+  if (normalizedGoals) {
+    const aggregated = aggregateGoals(normalizedGoals.goals);
+    resolvedTargetAmount = aggregated.totalTargetAmount;
+    resolvedHorizonMonths = aggregated.weightedHorizonMonths;
+    // goalId tersimpan hanya saat tepat satu tujuan.
+    persistedGoalId =
+      normalizedGoals.goals.length === 1
+        ? normalizedGoals.goals[0].id ?? (typeof goalId === "string" ? goalId : null)
+        : null;
+  } else {
+    // Mode tunggal (legacy): validasi targetAmount & horizonMonths dari body.
+    if (typeof targetAmount !== "number" || !Number.isFinite(targetAmount) || targetAmount <= 0) {
+      return NextResponse.json(
+        { error: "Target dana harus berupa angka yang lebih besar dari nol." },
+        { status: 400 },
+      );
+    }
+    resolvedTargetAmount = targetAmount;
+    resolvedHorizonMonths = horizonMonths as number; // divalidasi di blok berikut
+    persistedGoalId = typeof goalId === "string" ? goalId : null;
+  }
+
+  // Validasi horizon hanya untuk mode tunggal (legacy). Mode multi-tujuan
+  // sudah menurunkan horizon dari agregasi (bilangan bulat terjamin).
+  if (
+    !normalizedGoals &&
+    (typeof resolvedHorizonMonths !== "number" ||
+      !Number.isInteger(resolvedHorizonMonths) ||
+      resolvedHorizonMonths <= 0)
+  ) {
     return NextResponse.json(
       { error: "Jangka waktu harus berupa bilangan bulat bulan yang lebih besar dari nol." },
       { status: 400 },
@@ -171,8 +263,8 @@ export async function POST(req: Request) {
     result = computeGoalBudget({
       monthlyIncome,
       currentSavings,
-      targetAmount,
-      horizonMonths,
+      targetAmount: resolvedTargetAmount,
+      horizonMonths: resolvedHorizonMonths,
       monthlyExpense: resolvedMonthlyExpense,
     });
 
@@ -181,8 +273,8 @@ export async function POST(req: Request) {
         monthlyIncome,
         monthlyExpense: resolvedMonthlyExpense,
         currentSavings,
-        targetAmount,
-        horizonMonths,
+        targetAmount: resolvedTargetAmount,
+        horizonMonths: resolvedHorizonMonths,
         ditabung: result.ditabung,
         kebutuhan: result.kebutuhan,
         keinginan: result.keinginan,
@@ -206,8 +298,10 @@ export async function POST(req: Request) {
         // Kolom `mode` non-null di skema (tanpa migrasi) → tandai "goal".
         // Kolom includeSavings/investmentContribution dibiarkan null/diomit.
         mode: "goal",
-        savingsTargetAmount: targetAmount,
-        savingsHorizonMonths: horizonMonths,
+        // Tautan per-tujuan (null saat multi/"pilih semua").
+        goalId: persistedGoalId,
+        savingsTargetAmount: resolvedTargetAmount,
+        savingsHorizonMonths: resolvedHorizonMonths,
         breakdown: result.lines as unknown as Prisma.InputJsonValue,
       },
     });
@@ -220,8 +314,9 @@ export async function POST(req: Request) {
   }
 
   await trackEvent(userId, "budget_computed", {
-    targetAmount,
-    horizonMonths,
+    targetAmount: resolvedTargetAmount,
+    horizonMonths: resolvedHorizonMonths,
+    goalCount: normalizedGoals ? normalizedGoals.goals.length : 1,
     severity: result.feasibility.severity,
   });
 

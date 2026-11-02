@@ -17,3 +17,25 @@ export async function getActiveGoal(userId: string): Promise<Goal | null> {
     orderBy: { createdAt: "desc" },
   });
 }
+
+/**
+ * Ambil SEMUA tujuan milik pengguna (multi-tujuan), terbaru dulu.
+ * Dipakai dashboard (daftar tujuan) dan wizard Investasi/Planner (pemilih
+ * tujuan + "Pilih semua"). Selalu ter-scope `userId` (isolasi antar-pengguna).
+ */
+export async function listGoals(userId: string): Promise<Goal[]> {
+  return prisma.goal.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+/**
+ * Ambil satu tujuan milik pengguna berdasarkan `goalId`, atau `null` bila tidak
+ * ada / bukan milik pengguna. Guard `userId` mencegah akses lintas-pengguna.
+ */
+export async function getGoalById(userId: string, goalId: string): Promise<Goal | null> {
+  return prisma.goal.findFirst({
+    where: { id: goalId, userId },
+  });
+}

@@ -19,6 +19,28 @@ export interface Goal {
   horizonMonths: number; // jangka waktu dalam bulan
 }
 
+// ============================================================================
+// Multi-tujuan (multi-goal) — satu rencana bisa punya beberapa tujuan/kategori.
+// Alokasi investasi tetap TUNGGAL (satu profil risiko → satu komposisi), yang
+// bercabang adalah target & jangka waktu per tujuan.
+// ============================================================================
+
+// Satu tujuan sebagai input agregasi (nama opsional untuk label tampilan).
+export interface GoalInput {
+  id?: string; // id Goal (opsional; dipakai UI/penandaan per-tujuan)
+  name?: string | null; // label opsional, mis. "Beli Rumah"
+  targetAmount: number; // > 0, berhingga (FV tujuan ini)
+  horizonMonths: number; // bilangan bulat positif (jangka waktu tujuan ini)
+}
+
+// Hasil agregasi beberapa tujuan menjadi satu parameter perhitungan tunggal
+// (opsi A): target = total, horizon = rata-rata tertimbang oleh target.
+export interface AggregatedGoals {
+  totalTargetAmount: number; // Σ targetAmount
+  weightedHorizonMonths: number; // Σ(target × horizon) / Σ target, dibulatkan ke bilangan bulat
+  goalCount: number; // jumlah tujuan yang diagregasi
+}
+
 export interface ProjectionInput {
   futureValue: number; // FV = target
   presentValue: number; // PV = tabungan saat ini

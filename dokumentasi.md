@@ -97,10 +97,10 @@ Sembilan model Prisma. Model data keuangan menyertakan `userId` (kolom DB tetap 
 |---|---|---|
 | `User` | `username` (unik), `passwordHash`, `plan` | Akun login (auth demo). Password di-hash scrypt. `plan` = `"free"`\|`"pro"` (default `free`) untuk entitlement. |
 | `FinancialProfile` | `income`, `expense`, `currentSavings` | Sumber kebenaran kondisi keuangan; gate wajib. |
-| `Goal` | `name?`, `targetAmount`, `horizonMonths` | Tujuan Aktif: nama opsional + target + jangka waktu (bulan); sumber Horizon. |
+| `Goal` | `name?`, `targetAmount`, `horizonMonths` | **Multi-tujuan**: pengguna bisa punya beberapa tujuan (nama opsional + target + jangka waktu bulan). Dipilih satu/beberapa/semua di wizard (agregasi opsi A). |
 | `RiskAssessment` | `answers`, `score`, `profile` | Hasil survei risiko + klasifikasi. |
 | `InvestmentRecommendation` | `goalId?`, `riskProfile`, `composition` (Json), `annualReturn`, `monthlyContribution` | Rekomendasi akhir yang dipersistensi. |
-| `BudgetPlan` | `presetId`, `baseAmount`, `mode`, `savingsTargetAmount?`, `savingsHorizonMonths?`, `breakdown` (Json) | Rencana anggaran goal-driven (Planner). Beberapa kolom lama (`manualSavingsTarget`, `includeSavings`, `investmentContribution`) dipensiunkan tetapi dipertahankan. |
+| `BudgetPlan` | `goalId?`, `presetId`, `baseAmount`, `mode`, `savingsTargetAmount?`, `savingsHorizonMonths?`, `breakdown` (Json) | Rencana anggaran goal-driven (Planner). `goalId` menautkan ke satu `Goal` (null saat mode "pilih semua"/multi). Beberapa kolom lama (`manualSavingsTarget`, `includeSavings`, `investmentContribution`) dipensiunkan tetapi dipertahankan. |
 | `ChatUsage` | `userId`, `day`, `count` | Kuota harian chat AI per pengguna (rate limiting). Unik per `(userId, day)`. `day` = `"YYYY-MM-DD"` UTC. |
 | `AnalyticsEvent` | `userId`, `event`, `metadata?` (Json) | Event funnel (profil → tujuan → rekomendasi → konsultan/chat). |
 | `Booking` | `userId`, `consultantId`, `message?`, `snapshot?` (Json), `status` | Lead permintaan konsultasi ke konsultan (marketplace). Konsultan sendiri tetap data statis. |
@@ -256,6 +256,25 @@ Keputusan cakupan (final):
 - **Reuse pola yang ada:** model `Goal`, endpoint `/api/goal`, Prisma singleton (`lib/db.ts`), helper input Rupiah (`lib/format/rupiahInput.ts`), token Miami blue, format Rupiah `Rp ${Math.round(v).toLocaleString("id-ID")}`, `Profile_Gate`, dan disclaimer edukatif.
 
 **Kedua cakupan tetap berfungsi tanpa Tujuan Aktif:** bila belum ada, form Investasi/Planner memulai kosong dan mengizinkan input manual (tidak diblokir keras).
+
+#### 5.1.1.a Upgrade ke MULTI-TUJUAN (menggantikan "satu Tujuan Aktif")
+
+Konsep "satu Tujuan Aktif" di atas **sudah digantikan** oleh **multi-tujuan**: satu pengguna boleh punya **beberapa tujuan/kategori**, masing-masing dengan **nama, target dana, dan jangka waktu** sendiri. Teks di bagian 5.1.1 dipertahankan sebagai catatan historis; untuk kondisi terkini ikuti poin-poin berikut + kode.
+
+- **Daftar tujuan di dashboard.** `app/page.tsx` memakai `listGoals(userId)` → `components/goal/GoalsListCard.tsx` yang menampilkan **semua** tujuan + aksi **Tambah / Ubah / Hapus** per tujuan. `GoalEditor` mendukung dua mode: **tambah** (`POST /api/goal`) dan **ubah** (`PATCH /api/goal` dengan `id`). Penghapusan lewat `DELETE /api/goal?id=...`. Dashboard tetap satu-satunya pengelola `Goal`. (`ActiveGoalCard`/`GoalForm` lama dihapus — digantikan `GoalsListCard`/`GoalSelector`.)
+- **Pemilih tujuan + "Pilih semua" di wizard.** `components/goal/GoalSelector.tsx` (dipakai Investasi & Planner) menampilkan daftar tujuan dengan **checkbox per tujuan + opsi "Pilih semua"**. Pengguna memilih satu, beberapa, atau semua. Bila belum ada tujuan tersimpan → fallback form manual satu tujuan.
+- **Satu alokasi, multi kategori (opsi A).** Komposisi/profil risiko tetap **tunggal** (satu survei). Penggabungan tujuan memakai **opsi A** (`lib/investment/multiGoal.ts`, pure + teruji):
+  - **Target gabungan** = Σ `targetAmount`.
+  - **Horizon gabungan** = rata-rata **tertimbang oleh target** (`Σ(target×horizon)/Σ target`, dibulatkan, min. 1) — dipakai **hanya** untuk menentukan bucket alokasi tunggal (`getAllocation`).
+  - **Setoran bulanan** dihitung **per-tujuan** (FV annuity dengan horizon & target masing-masing, memakai `annualReturn` alokasi tunggal) lalu **dijumlahkan**. `presentValue` (tabungan saat ini) dibagi **proporsional target** antar tujuan agar tak dihitung ganda.
+  - Saat hanya satu tujuan → hasil identik dengan perhitungan tunggal lama.
+- **Kontrak API diperluas (backward-compatible):**
+  - `GET /api/goal` → `{ goals: Goal[], goal }` (`goal` singular = terbaru, untuk konsumen lama).
+  - `POST /api/goal` (buat), `PATCH /api/goal` (`{ id, name?, targetAmount, horizonMonths }` → 200), `DELETE /api/goal?id=` (atau body `{ id }` → `{ deleted:true }`; melepas tautan `goalId` di `InvestmentRecommendation`). Semua ter-guard `where:{ id, userId }`.
+  - `POST /api/recommendation` menerima `goals: GoalInput[]` (menggantikan pasangan tunggal `targetAmount`/`horizonMonths` bila dikirim) → respons menambah `goalCount`, `totalTargetAmount`, `weightedHorizonMonths`, dan `perGoal[]` (setoran per tujuan). Pasangan tunggal legacy tetap diterima.
+  - `GET /api/budget` menambah `goals[]` (untuk pemilih); `POST /api/budget` menerima `goals: GoalInput[]` → target/horizon diturunkan dari agregasi opsi A. Kolom baru `BudgetPlan.goalId` menautkan rencana ke satu tujuan (null saat mode "pilih semua"/multi) — migrasi `add_budget_plan_goal_id`.
+- **Chat Financial Twin multi-tujuan.** `lib/ai/financialContext.ts` kini merangkum **semua** tujuan (daftar per tujuan + ringkasan gabungan opsi A) ke `systemInstruction`.
+- **Migrasi DB:** satu kolom aditif `ALTER TABLE "BudgetPlan" ADD COLUMN "goalId" TEXT;` (nullable; aman untuk baris lama). Tujuan lama tetap muncul sebagai salah satu item daftar.
 
 ### 5.2 Integrasi Chatbot ke Data Pengguna
 Chatbot membaca konteks pengguna untuk konsultasi yang personal. **Kontrak data yang akan dikonsumsi:** `FinancialProfile` (income/expense/savings) + `InvestmentRecommendation` (komposisi, return, kontribusi bulanan) disuntikkan sebagai konteks ke prompt, sehingga jawaban chatbot selaras dengan rencana investasi pengguna.

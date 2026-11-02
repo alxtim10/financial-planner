@@ -8,10 +8,11 @@ import {
   isInstrumentCategory,
 } from "@/lib/investment/allocation";
 import {
-  calculateMonthlyContribution,
-  projectInvestment,
-} from "@/lib/investment/projection";
-import type { AllocationSlice, InvestmentProjection } from "@/types/finance";
+  aggregateGoals,
+  computeMultiGoalContribution,
+  type PerGoalContribution,
+} from "@/lib/investment/multiGoal";
+import type { AllocationSlice, InvestmentProjection, GoalInput } from "@/types/finance";
 import { getCurrentUserId } from "@/lib/auth/session";
 import { trackEvent } from "@/lib/analytics/track";
 import { isPro } from "@/lib/billing/plan";
@@ -20,11 +21,58 @@ export const runtime = "nodejs";
 
 interface RecommendationBody {
   goalId?: unknown;
+  // Multi-tujuan: daftar tujuan terpilih. Bila ada (non-kosong), menggantikan
+  // pasangan tunggal targetAmount/horizonMonths.
+  goals?: unknown;
   targetAmount?: unknown;
   horizonMonths?: unknown;
   riskAnswers?: unknown;
   selectedInstruments?: unknown;
   currentSavings?: unknown;
+}
+
+/**
+ * Menormalkan `body.goals` menjadi GoalInput[] valid, atau null bila tidak
+ * dikirim / tidak berbentuk array. Setiap elemen wajib punya targetAmount > 0
+ * dan horizonMonths bilangan bulat > 0; elemen tak valid membuat seluruh
+ * normalisasi gagal (dikembalikan sebagai pesan error).
+ */
+function normalizeGoals(
+  raw: unknown,
+): { goals: GoalInput[] } | { error: string } | null {
+  if (raw === undefined || raw === null) return null;
+  if (!Array.isArray(raw)) {
+    return { error: "Daftar tujuan harus berupa array." };
+  }
+  if (raw.length === 0) return null;
+
+  const goals: GoalInput[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) {
+      return { error: "Setiap tujuan harus berupa objek." };
+    }
+    const g = item as Record<string, unknown>;
+    const targetAmount = g.targetAmount;
+    const horizonMonths = g.horizonMonths;
+    if (typeof targetAmount !== "number" || !Number.isFinite(targetAmount) || targetAmount <= 0) {
+      return { error: "Target dana tiap tujuan harus angka lebih besar dari 0." };
+    }
+    if (
+      typeof horizonMonths !== "number" ||
+      !Number.isFinite(horizonMonths) ||
+      horizonMonths <= 0 ||
+      !Number.isInteger(horizonMonths)
+    ) {
+      return { error: "Jangka waktu tiap tujuan harus bilangan bulat lebih besar dari 0." };
+    }
+    goals.push({
+      id: typeof g.id === "string" ? g.id : undefined,
+      name: typeof g.name === "string" ? g.name : null,
+      targetAmount,
+      horizonMonths,
+    });
+  }
+  return { goals };
 }
 
 /**
@@ -58,6 +106,7 @@ export async function POST(req: Request) {
 
   const {
     goalId,
+    goals: rawGoals,
     targetAmount,
     horizonMonths,
     riskAnswers,
@@ -65,24 +114,42 @@ export async function POST(req: Request) {
     currentSavings,
   } = body ?? {};
 
-  // 1. Validasi input.
-  if (typeof targetAmount !== "number" || !Number.isFinite(targetAmount) || targetAmount <= 0) {
-    return NextResponse.json(
-      { error: "Target dana harus berupa angka lebih besar dari 0." },
-      { status: 400 },
-    );
+  // 1. Tentukan daftar tujuan. Prioritaskan `goals` (multi-tujuan); bila tidak
+  //    dikirim, pakai pasangan tunggal targetAmount/horizonMonths (legacy).
+  const normalized = normalizeGoals(rawGoals);
+  if (normalized && "error" in normalized) {
+    return NextResponse.json({ error: normalized.error }, { status: 400 });
   }
 
-  if (
-    typeof horizonMonths !== "number" ||
-    !Number.isFinite(horizonMonths) ||
-    horizonMonths <= 0 ||
-    !Number.isInteger(horizonMonths)
-  ) {
-    return NextResponse.json(
-      { error: "Jangka waktu (bulan) harus berupa bilangan bulat lebih besar dari 0." },
-      { status: 400 },
-    );
+  let goalList: GoalInput[];
+  if (normalized) {
+    goalList = normalized.goals;
+  } else {
+    // Mode tunggal (legacy): validasi targetAmount & horizonMonths.
+    if (typeof targetAmount !== "number" || !Number.isFinite(targetAmount) || targetAmount <= 0) {
+      return NextResponse.json(
+        { error: "Target dana harus berupa angka lebih besar dari 0." },
+        { status: 400 },
+      );
+    }
+    if (
+      typeof horizonMonths !== "number" ||
+      !Number.isFinite(horizonMonths) ||
+      horizonMonths <= 0 ||
+      !Number.isInteger(horizonMonths)
+    ) {
+      return NextResponse.json(
+        { error: "Jangka waktu (bulan) harus berupa bilangan bulat lebih besar dari 0." },
+        { status: 400 },
+      );
+    }
+    goalList = [
+      {
+        id: typeof goalId === "string" ? goalId : undefined,
+        targetAmount,
+        horizonMonths,
+      },
+    ];
   }
 
   if (typeof currentSavings !== "number" || !Number.isFinite(currentSavings) || currentSavings < 0) {
@@ -124,40 +191,46 @@ export async function POST(req: Request) {
   const goalIdValue = typeof goalId === "string" ? goalId : null;
 
   // 2–4. Mesin investasi (pure functions). Error input → 400.
+  //
+  // SATU ALOKASI untuk semua tujuan: bucket alokasi ditentukan dari horizon
+  // rata-rata tertimbang (opsi A). Setoran bulanan dihitung PER-TUJUAN lalu
+  // dijumlahkan (menghormati jangka waktu masing-masing).
   let profile: string;
   let score: number;
   let composition: AllocationSlice[];
   let annualReturn: number;
   let monthlyContribution: number;
   let projection: InvestmentProjection;
+  let perGoal: PerGoalContribution[];
+  let aggregatedTarget: number;
+  let aggregatedHorizon: number;
   try {
     const risk = scoreRisk(answers);
     score = risk.score;
     profile = risk.profile;
 
-    const baseAllocation = getAllocation(horizonMonths, risk.profile);
+    // Horizon tertimbang menentukan bucket alokasi tunggal.
+    const aggregated = aggregateGoals(goalList);
+    aggregatedTarget = aggregated.totalTargetAmount;
+    aggregatedHorizon = aggregated.weightedHorizonMonths;
+
+    const baseAllocation = getAllocation(aggregated.weightedHorizonMonths, risk.profile);
     // Terapkan preferensi instrumen pengguna (opsional). Kosong → sistem yang
     // menentukan (passthrough); ada pilihan → filter + normalisasi deterministik.
     const allocation = applyInstrumentPreference(baseAllocation, chosenInstruments);
     composition = allocation.composition;
     annualReturn = allocation.annualReturn;
 
-    monthlyContribution = calculateMonthlyContribution({
-      futureValue: targetAmount,
+    // Setoran per-tujuan + proyeksi agregat (opsi A).
+    const multi = computeMultiGoalContribution({
+      goals: goalList,
       presentValue: currentSavings,
       annualReturn: allocation.annualReturn,
-      horizonMonths,
-    });
-
-    // Proyeksi detail (deterministik): FV, total modal disetor, pertumbuhan,
-    // dan breakdown setoran + return per instrumen.
-    projection = projectInvestment({
-      presentValue: currentSavings,
-      monthlyContribution,
-      annualReturn: allocation.annualReturn,
-      horizonMonths,
       composition: allocation.composition,
     });
+    monthlyContribution = multi.totalMonthlyContribution;
+    projection = multi.projection;
+    perGoal = multi.perGoal;
   } catch (err) {
     console.error("[recommendation] input mesin investasi tidak valid:", err);
     return NextResponse.json(
@@ -177,10 +250,15 @@ export async function POST(req: Request) {
       },
     });
 
+    // goalId tersimpan hanya saat tepat satu tujuan direncanakan (agar tautan
+    // per-tujuan tetap bermakna). Pada mode "pilih semua"/multi, goalId null.
+    const persistedGoalId =
+      goalList.length === 1 ? goalList[0].id ?? goalIdValue : null;
+
     await prisma.investmentRecommendation.create({
       data: {
         userId,
-        goalId: goalIdValue,
+        goalId: persistedGoalId,
         riskProfile: profile,
         composition: composition as unknown as Prisma.InputJsonValue,
         annualReturn,
@@ -209,7 +287,18 @@ export async function POST(req: Request) {
     ? projection
     : { ...projection, perInstrument: [], perInstrumentLocked: true };
 
-  // 6. Sukses. Field lama tetap ada (backward-compatible) + `projection` detail.
+  // Breakdown per-tujuan (setoran bulanan masing-masing). Pembulatan Rupiah
+  // di sini agar UI bisa langsung menampilkannya.
+  const perGoalBreakdown = perGoal.map((p) => ({
+    id: p.id ?? null,
+    name: p.name ?? null,
+    targetAmount: p.targetAmount,
+    horizonMonths: p.horizonMonths,
+    monthlyContribution: Math.round(p.monthlyContribution),
+  }));
+
+  // 6. Sukses. Field lama tetap ada (backward-compatible) + `projection` detail
+  //    + info multi-tujuan (perGoal, totalTargetAmount, weightedHorizonMonths).
   return NextResponse.json(
     {
       riskProfile: profile,
@@ -218,6 +307,11 @@ export async function POST(req: Request) {
       monthlyContribution,
       projection: gatedProjection,
       plan: pro ? "pro" : "free",
+      // Multi-tujuan:
+      goalCount: goalList.length,
+      totalTargetAmount: aggregatedTarget,
+      weightedHorizonMonths: aggregatedHorizon,
+      perGoal: perGoalBreakdown,
     },
     { status: 200 },
   );

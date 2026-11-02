@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="760" viewBox="0 0 420 760" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .bg { fill: #f7f9fb; }
+      .surface { fill: #ffffff; }
+      .border { stroke: #e6ebf0; stroke-width: 1; }
+      .accent { fill: #00b4d8; }
+      .accentsoft { fill: #e3f7fb; }
+      .fg { fill: #1a2733; }
+      .muted { fill: #6b7a88; }
+      .h1 { fill: #1a2733; font-size: 22px; font-weight: 700; }
+      .label { fill: #6b7a88; font-size: 11px; }
+      .value { fill: #1a2733; font-size: 14px; font-weight: 600; }
+      .badge { fill: #00b4d8; font-size: 10px; font-weight: 600; }
+      .cardttl { fill: #1a2733; font-size: 13px; font-weight: 600; }
+      .btnw { fill: #ffffff; font-size: 13px; font-weight: 600; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="420" height="760"/>
+
+  <!-- header -->
+  <rect x="24" y="24" width="150" height="24" rx="12" class="accentsoft"/>
+  <circle cx="40" cy="36" r="4" class="accent"/>
+  <text x="52" y="40" class="badge">Perencana keuangan</text>
+  <rect x="300" y="24" width="44" height="24" rx="12" class="accent"/>
+  <text x="312" y="40" class="btnw" font-size="10">Pro ✦</text>
+  <rect x="350" y="24" width="46" height="24" rx="8" fill="#ffffff" class="border"/>
+  <text x="358" y="40" class="muted" font-size="10">Keluar</text>
+  <text x="24" y="78" class="h1">Tabungin</text>
+  <text x="24" y="98" class="muted" font-size="12">Rencanakan keuangan Anda secara terstruktur.</text>
+
+  <!-- profil ringkas -->
+  <rect x="24" y="116" width="372" height="118" rx="16" class="surface border"/>
+  <text x="40" y="140" class="cardttl">Profil finansial Anda</text>
+  <!-- 3 kolom -->
+  <rect x="40" y="152" width="110" height="66" rx="10" fill="#f7f9fb" class="border"/>
+  <rect x="52" y="164" width="22" height="22" rx="6" class="accentsoft"/>
+  <text x="52" y="200" class="label">Pemasukan/bln</text>
+  <text x="52" y="214" class="value">Rp 15.000.000</text>
+  <rect x="156" y="152" width="110" height="66" rx="10" fill="#f7f9fb" class="border"/>
+  <rect x="168" y="164" width="22" height="22" rx="6" class="accentsoft"/>
+  <text x="168" y="200" class="label">Pengeluaran/bln</text>
+  <text x="168" y="214" class="value">Rp 5.000.000</text>
+  <rect x="272" y="152" width="110" height="66" rx="10" fill="#f7f9fb" class="border"/>
+  <rect x="284" y="164" width="22" height="22" rx="6" class="accentsoft"/>
+  <text x="284" y="200" class="label">Tabungan</text>
+  <text x="284" y="214" class="value">Rp 30.000.000</text>
+
+  <!-- dana darurat -->
+  <rect x="24" y="248" width="372" height="92" rx="16" class="surface border"/>
+  <text x="40" y="272" class="cardttl">Dana Darurat</text>
+  <rect x="320" y="258" width="60" height="20" rx="10" fill="#e8f8ec"/>
+  <text x="330" y="272" fill="#1f9d55" font-size="10" font-weight="600">KUAT</text>
+  <text x="40" y="294" class="muted" font-size="11">Setara 6 bulan pengeluaran. Anda siap berinvestasi.</text>
+  <rect x="40" y="308" width="342" height="8" rx="4" fill="#e3f7fb"/>
+  <rect x="40" y="308" width="342" height="8" rx="4" class="accent"/>
+
+  <!-- tujuan aktif -->
+  <rect x="24" y="354" width="372" height="104" rx="16" class="surface border"/>
+  <text x="40" y="378" class="cardttl">Tujuan aktif</text>
+  <rect x="316" y="364" width="64" height="22" rx="8" fill="#ffffff" class="border"/>
+  <text x="326" y="379" class="muted" font-size="10">Ubah tujuan</text>
+  <text x="40" y="404" class="fg" font-size="16" font-weight="700">Beli Rumah</text>
+  <text x="40" y="426" class="muted" font-size="12">Target: Rp 300.000.000</text>
+  <text x="40" y="444" class="muted" font-size="12">Jangka waktu: 60 bulan (±5 tahun)</text>
+
+  <!-- CTA -->
+  <rect x="24" y="472" width="372" height="46" rx="12" class="accent"/>
+  <text x="130" y="500" class="btnw">Lanjut ke perencanaan investasi →</text>
+
+  <!-- nav grid -->
+  <text x="24" y="548" class="muted" font-size="12" font-weight="600">Jelajahi</text>
+  <rect x="24" y="560" width="182" height="80" rx="14" class="surface border"/>
+  <rect x="40" y="576" width="30" height="30" rx="8" class="accentsoft"/>
+  <text x="40" y="624" class="cardttl">Profil Finansial</text>
+  <rect x="214" y="560" width="182" height="80" rx="14" class="surface border"/>
+  <rect x="230" y="576" width="30" height="30" rx="8" class="accentsoft"/>
+  <text x="230" y="624" class="cardttl">Investasi</text>
+  <rect x="24" y="650" width="182" height="80" rx="14" class="surface border"/>
+  <rect x="40" y="666" width="30" height="30" rx="8" class="accentsoft"/>
+  <text x="40" y="714" class="cardttl">Anggaran</text>
+  <rect x="214" y="650" width="182" height="80" rx="14" class="surface border"/>
+  <rect x="230" y="666" width="30" height="30" rx="8" class="accentsoft"/>
+  <text x="230" y="714" class="cardttl">Konsultan Keuangan</text>
+
+  <!-- tombol chat mengambang -->
+  <circle cx="384" cy="708" r="20" class="accent"/>
+  <text x="377" y="714" class="btnw" font-size="16">💬</text>
+</svg>

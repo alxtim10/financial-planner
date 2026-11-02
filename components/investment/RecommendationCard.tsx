@@ -11,6 +11,7 @@ import {
   Sprout,
   Target,
   ExternalLink,
+  Store,
 } from "lucide-react";
 import type {
   AllocationSlice,
@@ -77,14 +78,28 @@ function findInstrumentInfo(instrument: string): { label: string; desc: string }
   return match ? { label: match.label, desc: match.desc } : null;
 }
 
+/** Rincian setoran bulanan per tujuan (multi-tujuan). */
+export interface PerGoalBreakdown {
+  id: string | null;
+  name: string | null;
+  targetAmount: number;
+  horizonMonths: number;
+  monthlyContribution: number;
+}
+
 /** Payload rekomendasi dari POST /api/recommendation. */
 export interface InvestmentRecommendation {
   riskProfile: RiskProfile | string;
   composition: AllocationSlice[];
   annualReturn: number; // desimal, mis. 0.095 → 9,5%
-  monthlyContribution: number; // Rupiah
+  monthlyContribution: number; // Rupiah (total lintas tujuan)
   /** Proyeksi detail (opsional demi backward-compat bila API lama). */
   projection?: InvestmentProjection;
+  /** Multi-tujuan (opsional demi backward-compat). */
+  goalCount?: number;
+  totalTargetAmount?: number;
+  weightedHorizonMonths?: number;
+  perGoal?: PerGoalBreakdown[];
 }
 
 interface RecommendationCardProps {
@@ -126,8 +141,16 @@ export default function RecommendationCard({
   recommendation,
   onRestart,
 }: RecommendationCardProps) {
-  const { riskProfile, composition, annualReturn, monthlyContribution, projection } =
-    recommendation;
+  const {
+    riskProfile,
+    composition,
+    annualReturn,
+    monthlyContribution,
+    projection,
+    perGoal,
+  } = recommendation;
+  // Breakdown multi-tujuan hanya ditampilkan bila >1 tujuan direncanakan.
+  const multiGoal = Array.isArray(perGoal) && perGoal.length > 1;
   // Instrumen mana yang penjelasannya sedang dibuka (null = tidak ada).
   const [openInfo, setOpenInfo] = useState<string | null>(null);
 
@@ -136,9 +159,22 @@ export default function RecommendationCard({
     (projection?.perInstrument ?? []).map((p) => [p.instrument, p]),
   );
 
-  // Lacak kategori yang placement partnernya sudah dirender, agar satu kategori
-  // tidak tampil ganda saat ada beberapa slice sekategori.
-  const shownCategories = new Set<string>();
+  // Placement partner dikumpulkan dalam SATU blok terpisah di bawah kartu
+  // rekomendasi — sengaja TIDAK ditempel per-slice persentase agar pengguna
+  // tidak menyangka angka alokasi mengarah ke produk tertentu (cegah kesan
+  // bias). Lapisan ini read-only terhadap engine: hanya memetakan kategori
+  // instrumen yang MUNCUL di komposisi → tawaran partner, dedupe per kategori.
+  const partnerOffers: PartnerOffer[] = (() => {
+    const seen = new Set<string>();
+    const result: PartnerOffer[] = [];
+    for (const slice of composition) {
+      const category = instrumentToCategory(slice.instrument);
+      if (!category || seen.has(category)) continue;
+      seen.add(category);
+      result.push(...getPartnerOffers(category));
+    }
+    return result;
+  })();
 
   /** Catat klik placement partner (fire-and-forget, tak mengganggu UX). */
   function handlePartnerClick(offer: PartnerOffer) {
@@ -176,13 +212,48 @@ export default function RecommendationCard({
           <div className="flex flex-col gap-1 rounded-xl border border-border bg-background px-4 py-3.5">
             <span className="flex items-center gap-1.5 text-xs text-muted">
               <CalendarClock className="h-3.5 w-3.5" />
-              Kontribusi per bulan
+              {multiGoal ? "Total kontribusi per bulan" : "Kontribusi per bulan"}
             </span>
             <span className="text-xl font-semibold text-foreground">
               {formatRupiah(monthlyContribution)}
             </span>
           </div>
         </div>
+
+        {/* Rincian setoran per tujuan (hanya saat >1 tujuan direncanakan) */}
+        {multiGoal && perGoal && (
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-background px-4 py-4">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+              <Target className="h-3.5 w-3.5 text-[var(--accent)]" />
+              Setoran bulanan per tujuan
+            </span>
+            <ul className="flex flex-col divide-y divide-border">
+              {perGoal.map((g, i) => (
+                <li
+                  key={g.id ?? `${g.name ?? "goal"}-${i}`}
+                  className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0"
+                >
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-sm text-foreground">
+                      {g.name && g.name.trim() !== "" ? g.name.trim() : "Tanpa nama"}
+                    </span>
+                    <span className="text-xs text-muted">
+                      {formatRupiah(g.targetAmount)} · {g.horizonMonths} bln
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">
+                    {formatRupiah(g.monthlyContribution)}/bln
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs leading-relaxed text-muted">
+              Tiap tujuan dihitung dengan jangka waktunya sendiri, lalu
+              dijumlahkan. Komposisi alokasi di bawah berlaku untuk seluruh
+              setoran gabungan.
+            </p>
+          </div>
+        )}
 
         {/* Proyeksi detail: total terkumpul, modal disetor, hasil pertumbuhan */}
         {projection && (
@@ -257,15 +328,6 @@ export default function RecommendationCard({
               const info = findInstrumentInfo(slice.instrument);
               const isOpen = openInfo === slice.instrument;
               const detail = perInstrumentMap.get(slice.instrument);
-              // Placement partner (lapisan terpisah, read-only terhadap engine):
-              // petakan label slice → kategori kanonik → tawaran partner. Dedupe
-              // per kategori agar tak tampil ganda.
-              const category = instrumentToCategory(slice.instrument);
-              let offers: PartnerOffer[] = [];
-              if (category && !shownCategories.has(category)) {
-                offers = getPartnerOffers(category);
-                if (offers.length > 0) shownCategories.add(category);
-              }
               return (
                 <li key={slice.instrument} className="flex flex-col gap-2">
                   <div className="flex items-start justify-between gap-3 text-sm">
@@ -316,31 +378,6 @@ export default function RecommendationCard({
                       </p>
                     </div>
                   )}
-                  {/* Placement partner kontekstual (konten partner, ditandai
-                      jelas). Tidak memengaruhi angka/alokasi di atas. */}
-                  {offers.map((offer) => (
-                    <a
-                      key={offer.id}
-                      href={offer.referralUrl}
-                      target="_blank"
-                      rel="noopener noreferrer sponsored"
-                      onClick={() => handlePartnerClick(offer)}
-                      className="ml-4.5 flex items-start justify-between gap-3 rounded-lg border border-dashed border-border bg-background px-3 py-2.5 transition-colors hover:border-[var(--accent)]/50"
-                    >
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="text-xs font-medium text-[var(--accent)]">
-                          {offer.ctaLabel}
-                        </span>
-                        <span className="truncate text-xs text-foreground">
-                          {offer.partnerName} · {offer.productLabel}
-                        </span>
-                        <span className="text-[11px] leading-snug text-muted">
-                          {offer.disclosure}
-                        </span>
-                      </span>
-                      <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />
-                    </a>
-                  ))}
                 </li>
               );
             })}
@@ -363,6 +400,59 @@ export default function RecommendationCard({
           </button>
         )}
       </div>
+
+      {/* Blok placement partner — TERPISAH dari kartu rekomendasi di atas.
+          Sengaja tidak ditempel per-slice agar tidak terkesan angka alokasi
+          mengarah ke produk tertentu. Ditandai jelas sebagai konten partner. */}
+      {partnerOffers.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-border bg-surface p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] sm:p-6">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
+              <Store className="h-4.5 w-4.5" />
+            </span>
+            <div className="flex flex-col">
+              <span className="text-xs text-muted">Konten partner</span>
+              <span className="text-base font-semibold text-foreground">
+                Mulai berinvestasi lewat partner
+              </span>
+            </div>
+          </div>
+          <p className="text-xs leading-relaxed text-muted">
+            Tawaran berikut berasal dari partner dan{" "}
+            <span className="font-medium text-foreground">
+              tidak memengaruhi
+            </span>{" "}
+            perhitungan komposisi/persentase di atas. Angka alokasi dihitung
+            mandiri, bukan dari siapa yang beriklan.
+          </p>
+          <ul className="flex flex-col gap-2.5">
+            {partnerOffers.map((offer) => (
+              <li key={offer.id}>
+                <a
+                  href={offer.referralUrl}
+                  target="_blank"
+                  rel="noopener noreferrer sponsored"
+                  onClick={() => handlePartnerClick(offer)}
+                  className="flex items-start justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3 transition-colors hover:border-[var(--accent)]/50"
+                >
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-sm font-medium text-[var(--accent)]">
+                      {offer.ctaLabel}
+                    </span>
+                    <span className="text-xs text-foreground">
+                      {offer.partnerName} · {offer.productLabel}
+                    </span>
+                    <span className="text-[11px] leading-snug text-muted">
+                      {offer.disclosure}
+                    </span>
+                  </span>
+                  <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Disclaimer edukatif wajib (Req 6.2) */}
       <div className="flex items-start gap-2.5 rounded-xl border border-border bg-accent-soft px-4 py-3.5">
