@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Info,
   TrendingUp,
@@ -10,8 +11,8 @@ import {
   Wallet,
   Sprout,
   Target,
-  ExternalLink,
   Store,
+  ArrowRight,
 } from "lucide-react";
 import type {
   AllocationSlice,
@@ -19,7 +20,7 @@ import type {
   InvestmentProjection,
 } from "@/types/finance";
 import { instrumentToCategory } from "@/lib/investment/allocation";
-import { getPartnerOffers, type PartnerOffer } from "@/lib/partners";
+import { getPartnerOffers } from "@/lib/partners";
 import { trackClientEvent } from "@/lib/analytics/client";
 
 /**
@@ -159,28 +160,33 @@ export default function RecommendationCard({
     (projection?.perInstrument ?? []).map((p) => [p.instrument, p]),
   );
 
-  // Placement partner dikumpulkan dalam SATU blok terpisah di bawah kartu
-  // rekomendasi — sengaja TIDAK ditempel per-slice persentase agar pengguna
-  // tidak menyangka angka alokasi mengarah ke produk tertentu (cegah kesan
-  // bias). Lapisan ini read-only terhadap engine: hanya memetakan kategori
-  // instrumen yang MUNCUL di komposisi → tawaran partner, dedupe per kategori.
-  const partnerOffers: PartnerOffer[] = (() => {
+  // Kategori instrumen kanonik yang MUNCUL di komposisi (dedupe, pertahankan
+  // urutan). Dipakai untuk: (a) menentukan apakah ada tawaran partner relevan,
+  // dan (b) diteruskan sebagai query ke halaman /partners.
+  const partnerCategories: string[] = (() => {
     const seen = new Set<string>();
-    const result: PartnerOffer[] = [];
+    const cats: string[] = [];
     for (const slice of composition) {
       const category = instrumentToCategory(slice.instrument);
       if (!category || seen.has(category)) continue;
       seen.add(category);
-      result.push(...getPartnerOffers(category));
+      cats.push(category);
     }
-    return result;
+    return cats;
   })();
 
-  /** Catat klik placement partner (fire-and-forget, tak mengganggu UX). */
-  function handlePartnerClick(offer: PartnerOffer) {
+  // Hanya tampilkan tombol bila ada minimal satu tawaran partner untuk kategori
+  // pada komposisi (read-only terhadap engine, tidak mengubah angka).
+  const hasPartnerOffers = partnerCategories.some(
+    (c) => getPartnerOffers(c as Parameters<typeof getPartnerOffers>[0]).length > 0,
+  );
+  const partnersHref = `/partners?c=${encodeURIComponent(partnerCategories.join(","))}`;
+
+  /** Catat klik menuju halaman partner (fire-and-forget, tak mengganggu UX). */
+  function handlePartnersCtaClick() {
     trackClientEvent("partner_placement_clicked", {
-      partnerId: offer.id,
-      category: offer.category,
+      categories: partnerCategories,
+      source: "recommendation_cta",
     });
   }
 
@@ -401,57 +407,35 @@ export default function RecommendationCard({
         )}
       </div>
 
-      {/* Blok placement partner — TERPISAH dari kartu rekomendasi di atas.
-          Sengaja tidak ditempel per-slice agar tidak terkesan angka alokasi
-          mengarah ke produk tertentu. Ditandai jelas sebagai konten partner. */}
-      {partnerOffers.length > 0 && (
-        <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-border bg-surface p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] sm:p-6">
-          <div className="flex items-center gap-2.5">
+      {/* Tombol menuju halaman konten partner — TERPISAH dari angka rekomendasi.
+          Membawa kategori instrumen pada komposisi lewat query agar halaman
+          partner menampilkan tawaran yang relevan. */}
+      {hasPartnerOffers && (
+        <Link
+          href={partnersHref}
+          onClick={handlePartnersCtaClick}
+          className="flex items-center justify-between gap-3 rounded-2xl border border-dashed border-border bg-surface px-5 py-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] transition-colors hover:border-[var(--accent)]/50 sm:px-6"
+        >
+          <span className="flex min-w-0 items-center gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
               <Store className="h-4.5 w-4.5" />
             </span>
-            <div className="flex flex-col">
-              <span className="text-xs text-muted">Konten partner</span>
-              <span className="text-base font-semibold text-foreground">
+            <span className="flex min-w-0 flex-col">
+              <span className="text-sm font-semibold text-foreground">
                 Mulai berinvestasi lewat partner
               </span>
-            </div>
-          </div>
-          <p className="text-xs leading-relaxed text-muted">
-            Tawaran berikut berasal dari partner dan{" "}
-            <span className="font-medium text-foreground">
-              tidak memengaruhi
-            </span>{" "}
-            perhitungan komposisi/persentase di atas. Angka alokasi dihitung
-            mandiri, bukan dari siapa yang beriklan.
-          </p>
-          <ul className="flex flex-col gap-2.5">
-            {partnerOffers.map((offer) => (
-              <li key={offer.id}>
-                <a
-                  href={offer.referralUrl}
-                  target="_blank"
-                  rel="noopener noreferrer sponsored"
-                  onClick={() => handlePartnerClick(offer)}
-                  className="flex items-start justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3 transition-colors hover:border-[var(--accent)]/50"
-                >
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-sm font-medium text-[var(--accent)]">
-                      {offer.ctaLabel}
-                    </span>
-                    <span className="text-xs text-foreground">
-                      {offer.partnerName} · {offer.productLabel}
-                    </span>
-                    <span className="text-[11px] leading-snug text-muted">
-                      {offer.disclosure}
-                    </span>
-                  </span>
-                  <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
+              <span className="text-xs text-muted">
+                Lihat tawaran partner sesuai komposisi rekomendasi Anda.
+              </span>
+              <span className="mt-0.5 text-[11px] leading-snug text-muted">
+                Tawaran dari partner dan{" "}
+                <span className="font-medium text-foreground">tidak memengaruhi</span>{" "}
+                perhitungan komposisi/persentase di atas.
+              </span>
+            </span>
+          </span>
+          <ArrowRight className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+        </Link>
       )}
 
       {/* Disclaimer edukatif wajib (Req 6.2) */}
