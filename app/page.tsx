@@ -14,11 +14,11 @@ import {
   Wallet,
 } from "lucide-react";
 import { getLatestProfile } from "@/lib/profileGate";
-import { getActiveGoal } from "@/lib/goal";
+import { listGoals } from "@/lib/goal";
 import { getCurrentUserId, isAdmin } from "@/lib/auth/session";
 import { isPro } from "@/lib/billing/plan";
 import { prisma } from "@/lib/db";
-import ActiveGoalCard from "@/components/goal/ActiveGoalCard";
+import GoalsListCard from "@/components/goal/GoalsListCard";
 import EmergencyFundCard from "@/components/profile/EmergencyFundCard";
 import LogoutButton from "@/components/auth/LogoutButton";
 
@@ -53,7 +53,8 @@ export default async function Home() {
 
   const profile = await getLatestProfile(userId);
   const hasProfile = profile !== null;
-  const activeGoal = await getActiveGoal(userId);
+  const goals = await listGoals(userId);
+  const hasGoals = goals.length > 0;
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   const admin = isAdmin(user?.username);
@@ -193,18 +194,14 @@ export default async function Home() {
           />
         )}
 
-        {/* ── Kartu Tujuan Aktif (Req 4.5) ────────────────────── */}
-        <ActiveGoalCard
-          activeGoal={
-            activeGoal
-              ? {
-                  id: activeGoal.id,
-                  name: activeGoal.name,
-                  targetAmount: activeGoal.targetAmount,
-                  horizonMonths: activeGoal.horizonMonths,
-                }
-              : null
-          }
+        {/* ── Kartu Daftar Tujuan (multi-tujuan) ──────────────── */}
+        <GoalsListCard
+          goals={goals.map((g) => ({
+            id: g.id,
+            name: g.name,
+            targetAmount: g.targetAmount,
+            horizonMonths: g.horizonMonths,
+          }))}
         />
 
         {/* ── CTA lanjut: satu alur profil → tujuan → investasi ─── */}
@@ -218,9 +215,9 @@ export default async function Home() {
               <ArrowRight className="h-4 w-4" />
             </Link>
             <p className="mt-2 text-center text-xs text-muted">
-              {activeGoal
-                ? "Target dana dan jangka waktu tujuan aktif di atas akan otomatis dipakai."
-                : "Belum ada tujuan aktif — Anda tetap bisa mengisinya manual di halaman investasi, atau tetapkan dulu di atas."}
+              {hasGoals
+                ? "Pilih satu, beberapa, atau semua tujuan di atas saat merencanakan investasi."
+                : "Belum ada tujuan — Anda tetap bisa mengisinya manual di halaman investasi, atau tambahkan dulu di atas."}
             </p>
           </div>
         )}

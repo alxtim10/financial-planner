@@ -12,13 +12,18 @@ import {
 import { formatThousands, parseThousands } from "@/lib/format/rupiahInput";
 
 interface GoalEditorProps {
+  /**
+   * Bila disediakan → mode EDIT (PATCH /api/goal tujuan ini). Bila tidak →
+   * mode TAMBAH (POST /api/goal membuat tujuan baru).
+   */
+  goalId?: string;
   /** Nilai awal nama (mode "ubah"); `null`/undefined → kosong. */
   initialName?: string | null;
   /** Nilai awal target (Rupiah, mode "ubah"); `null`/undefined → kosong. */
   initialTargetAmount?: number | null;
   /** Nilai awal jangka waktu (bulan, mode "ubah"); `null`/undefined → kosong. */
   initialHorizonMonths?: number | null;
-  /** Dipanggil setelah Goal berhasil disimpan (POST /api/goal 201). */
+  /** Dipanggil setelah Goal berhasil disimpan (POST 201 / PATCH 200). */
   onSaved: () => void;
   /** Bila disediakan, tampilkan tombol "Batal". */
   onCancel?: () => void;
@@ -64,6 +69,7 @@ function validateHorizon(value: string): string | undefined {
  * `GoalForm`/`BudgetForm` (Miami blue).
  */
 export default function GoalEditor({
+  goalId,
   initialName,
   initialTargetAmount,
   initialHorizonMonths,
@@ -105,19 +111,22 @@ export default function GoalEditor({
     const horizon = Number(horizonMonths.trim());
     const trimmedName = name.trim();
 
+    const isEdit = typeof goalId === "string" && goalId !== "";
     setSubmitting(true);
     try {
       const res = await fetch("/api/goal", {
-        method: "POST",
+        method: isEdit ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...(isEdit ? { id: goalId } : {}),
           name: trimmedName || null,
           targetAmount: target,
           horizonMonths: horizon,
         }),
       });
 
-      if (res.status === 201) {
+      // POST → 201 (create); PATCH → 200 (update).
+      if (res.status === 201 || res.status === 200) {
         onSaved();
         return;
       }
@@ -285,7 +294,7 @@ export default function GoalEditor({
           ) : (
             <>
               <Check className="h-4 w-4" />
-              Simpan tujuan
+              {goalId ? "Simpan perubahan" : "Simpan tujuan"}
             </>
           )}
         </button>

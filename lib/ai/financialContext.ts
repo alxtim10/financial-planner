@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getLatestProfile } from "@/lib/profileGate";
-import { getActiveGoal } from "@/lib/goal";
+import { listGoals } from "@/lib/goal";
+import { aggregateGoals } from "@/lib/investment/multiGoal";
 import { getCurrentUserId } from "@/lib/auth/session";
 import { evaluateEmergencyFund } from "@/lib/financial/emergencyFund";
 
@@ -24,7 +25,8 @@ export async function getFinancialTwinContext(): Promise<string> {
     }
 
     const profile = await getLatestProfile(userId);
-    const activeGoal = await getActiveGoal(userId);
+    const allGoals = await listGoals(userId);
+    const activeGoal = allGoals[0] ?? null;
 
     const [latestRisk, latestRec, latestBudget] = await Promise.all([
       prisma.riskAssessment.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } }),
@@ -55,13 +57,34 @@ export async function getFinancialTwinContext(): Promise<string> {
       lines.push(`• **Profil Finansial**: Belum diisi.`);
     }
 
-    if (activeGoal) {
-      lines.push(`• **Tujuan Aktif (Active Goal)**:`);
-      lines.push(`  - Nama Tujuan: ${activeGoal.name || "Target Utama"}`);
-      lines.push(`  - Target Dana: ${fmt(activeGoal.targetAmount)}`);
-      lines.push(`  - Jangka Waktu: ${activeGoal.horizonMonths} bulan (~${(activeGoal.horizonMonths / 12).toFixed(1)} tahun)`);
+    if (allGoals.length > 0) {
+      if (allGoals.length === 1) {
+        const g = allGoals[0];
+        lines.push(`• **Tujuan Keuangan**:`);
+        lines.push(`  - Nama Tujuan: ${g.name || "Target Utama"}`);
+        lines.push(`  - Target Dana: ${fmt(g.targetAmount)}`);
+        lines.push(`  - Jangka Waktu: ${g.horizonMonths} bulan (~${(g.horizonMonths / 12).toFixed(1)} tahun)`);
+      } else {
+        // Multi-tujuan: rangkum semua tujuan + agregat gabungan (opsi A).
+        lines.push(`• **Tujuan Keuangan (${allGoals.length} tujuan)**:`);
+        for (const g of allGoals) {
+          lines.push(
+            `  - ${g.name || "Tanpa nama"}: target ${fmt(g.targetAmount)}, jangka waktu ${g.horizonMonths} bulan (~${(g.horizonMonths / 12).toFixed(1)} tahun)`,
+          );
+        }
+        try {
+          const agg = aggregateGoals(
+            allGoals.map((g) => ({ targetAmount: g.targetAmount, horizonMonths: g.horizonMonths })),
+          );
+          lines.push(
+            `  - Gabungan (bila semua tujuan dijalankan bersama): total target ${fmt(agg.totalTargetAmount)}, jangka waktu rata-rata tertimbang ${agg.weightedHorizonMonths} bulan.`,
+          );
+        } catch {
+          /* abaikan bila agregasi gagal — konteks tetap berisi daftar per tujuan */
+        }
+      }
     } else {
-      lines.push(`• **Tujuan Aktif**: Belum ditetapkan.`);
+      lines.push(`• **Tujuan Keuangan**: Belum ditetapkan.`);
     }
 
     if (latestRisk) {

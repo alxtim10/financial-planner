@@ -30,7 +30,8 @@ export default async function LoginPage() {
             Masuk ke Tabungin
           </h1>
           <p className="text-[0.9375rem] leading-relaxed text-muted">
-            Masuk dengan akun Anda untuk melanjutkan perencanaan keuangan.
+            Mode demo: cukup tekan <span className="font-medium text-foreground">Masuk</span> —
+            Anda langsung masuk ke akun demo (input diabaikan).
           </p>
         </header>
 

@@ -20,11 +20,8 @@ export default function LoginForm() {
     if (submitting) return;
     setError(null);
 
-    if (!username.trim() || !password) {
-      setError("Username dan password wajib diisi.");
-      return;
-    }
-
+    // Mode bypass (demo): tidak ada validasi — input apa pun (termasuk kosong)
+    // diteruskan. Server menerima semuanya dan auto-provision bila perlu.
     setSubmitting(true);
     try {
       const res = await fetch("/api/auth/login", {

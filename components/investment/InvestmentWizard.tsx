@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Loader2, AlertCircle, Check } from "lucide-react";
-import GoalForm, { type GoalValues } from "./GoalForm";
+import GoalSelector, { type SelectedGoal } from "@/components/goal/GoalSelector";
 import RiskSurvey, { type RiskSurveyResult } from "./RiskSurvey";
 import RecommendationCard, {
   type InvestmentRecommendation,
@@ -17,93 +17,41 @@ const STEP_LABELS: Record<Step, string> = {
   3: "Rekomendasi",
 };
 
-/** Bentuk Active_Goal yang mengalir dari GET /api/goal (createdAt diomit). */
-interface ActiveGoal {
-  id: string;
-  name: string | null;
-  targetAmount: number;
-  horizonMonths: number;
-}
-
 /**
  * InvestmentWizard — orkestrator client alur Investasi (Req 6.1, 6.2, 6.3, 7.x).
  *
- * Merangkai GoalForm → RiskSurvey → RecommendationCard sebagai stepper:
- *  1. GoalForm: kumpulkan targetAmount, horizonMonths — terprefill dari
- *     Active_Goal (GET /api/goal saat mount); pengguna boleh menimpa (one-off).
+ * Merangkai GoalSelector → RiskSurvey → RecommendationCard sebagai stepper:
+ *  1. GoalSelector: pilih satu/beberapa/semua tujuan (multi-tujuan). Bila belum
+ *     ada tujuan tersimpan, pengguna mengisi satu tujuan manual (fallback).
  *  2. RiskSurvey: kumpulkan riskAnswers (number[] panjang 5).
  *  3. Ambil currentSavings via GET /api/profile, lalu POST /api/recommendation
- *     dengan goalId dari Active_Goal + target/horizon efektif; tampilkan
- *     RecommendationCard.
+ *     dengan daftar `goals` terpilih; server memakai SATU alokasi + agregasi
+ *     opsi A, lalu menampilkan RecommendationCard.
  *
- * Wizard TIDAK membuat baris Goal (tidak POST /api/goal) — dashboard satu-satunya
- * pembuat Goal, dan override di form bersifat satu kali (tidak dipersistensi).
+ * Wizard TIDAK membuat/mengubah baris Goal — dashboard satu-satunya pengelola
+ * Goal. Pilihan di sini bersifat satu kali untuk skenario perhitungan.
  *
  * Menangani loading & error dengan pesan Bahasa Indonesia yang ramah.
  */
 export default function InvestmentWizard() {
   const [step, setStep] = useState<Step>(1);
-  // Active_Goal dari GET /api/goal (sumber goalId + nilai prefill).
-  const [activeGoal, setActiveGoal] = useState<ActiveGoal | null>(null);
-  // Status pemuatan Active_Goal. GoalForm baru dirender setelah fetch selesai
-  // agar nilai prefill `initial` benar sejak render pertama (state useState di
-  // GoalForm hanya membaca `initial` saat mount).
-  const [goalLoading, setGoalLoading] = useState(true);
-  // Nilai target/horizon efektif (bisa hasil override di GoalForm).
-  const [goal, setGoal] = useState<GoalValues | null>(null);
+  // Tujuan terpilih (≥1) dari GoalSelector.
+  const [selectedGoals, setSelectedGoals] = useState<SelectedGoal[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recommendation, setRecommendation] = useState<InvestmentRecommendation | null>(null);
 
-  // Muat Active_Goal saat mount untuk memprefill GoalForm. Non-fatal bila gagal
-  // atau null: form dibiarkan kosong dan input manual tetap diperbolehkan.
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/goal", { method: "GET" });
-        if (!active) return;
-        if (res.ok) {
-          const data = await res.json();
-          const g = data?.goal;
-          if (
-            g &&
-            typeof g.targetAmount === "number" &&
-            Number.isFinite(g.targetAmount) &&
-            typeof g.horizonMonths === "number" &&
-            Number.isFinite(g.horizonMonths)
-          ) {
-            setActiveGoal({
-              id: g.id,
-              name: typeof g.name === "string" ? g.name : null,
-              targetAmount: g.targetAmount,
-              horizonMonths: g.horizonMonths,
-            });
-          }
-        }
-        // Gagal/null → biarkan activeGoal null; form kosong, input manual.
-      } catch {
-        /* offline / gangguan jaringan — biarkan form terisi manual */
-      } finally {
-        if (active) setGoalLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  /** Langkah 1 selesai: simpan nilai efektif (target/horizon), lanjut ke survei. */
-  function handleGoalSubmitted(values: GoalValues) {
-    setGoal(values);
+  /** Langkah 1 selesai: simpan tujuan terpilih, lanjut ke survei. */
+  function handleGoalsSelected(goals: SelectedGoal[]) {
+    setSelectedGoals(goals);
     setError(null);
     setStep(2);
   }
 
   /** Langkah 2 selesai: ambil savings, hitung rekomendasi, lanjut ke langkah 3. */
   async function handleSurveyComplete({ answers: riskAnswers, selectedInstruments }: RiskSurveyResult) {
-    if (!goal) {
-      setError("Data tujuan tidak ditemukan. Silakan mulai dari awal.");
+    if (selectedGoals.length === 0) {
+      setError("Belum ada tujuan dipilih. Silakan mulai dari awal.");
       setStep(1);
       return;
     }
@@ -129,12 +77,14 @@ export default function InvestmentWizard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // goalId berasal dari Active_Goal (bukan dari form) — bisa undefined
-          // bila belum ada tujuan tersimpan.
-          goalId: activeGoal?.id ?? undefined,
-          // target/horizon efektif dari form (mungkin hasil override satu kali).
-          targetAmount: goal.targetAmount,
-          horizonMonths: goal.horizonMonths,
+          // Daftar tujuan terpilih (satu, beberapa, atau semua). Server
+          // mengagregasi target + horizon (opsi A) dengan satu alokasi.
+          goals: selectedGoals.map((g) => ({
+            id: g.id,
+            name: g.name,
+            targetAmount: g.targetAmount,
+            horizonMonths: g.horizonMonths,
+          })),
           riskAnswers,
           // Pilihan instrumen opsional; kosong = sistem menentukan alokasi.
           selectedInstruments,
@@ -166,7 +116,7 @@ export default function InvestmentWizard() {
   /** Ulang seluruh alur dari awal. */
   function handleRestart() {
     setStep(1);
-    setGoal(null);
+    setSelectedGoals([]);
     setRecommendation(null);
     setError(null);
     setLoading(false);
@@ -214,31 +164,12 @@ export default function InvestmentWizard() {
       </ol>
 
       {/* Konten per langkah */}
-      {step === 1 &&
-        (goalLoading ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-surface px-5 py-12 text-center">
-            <Loader2 className="h-6 w-6 animate-spin text-[var(--accent)]" />
-            <p className="text-sm text-muted">Memuat tujuan aktif Anda...</p>
-          </div>
-        ) : (
-          <GoalForm
-            // Setelah goalLoading selesai, `initial` dipastikan final (Active_Goal
-            // sudah termuat atau null), sehingga prefill benar pada mount GoalForm.
-            initial={(() => {
-              // Prefill: nilai efektif (override sebelumnya) diprioritaskan, lalu
-              // Active_Goal. GoalForm memformat target dengan pemisah ribuan.
-              const source = goal ?? activeGoal;
-              return source
-                ? {
-                    targetAmount: String(source.targetAmount),
-                    horizonMonths: String(source.horizonMonths),
-                  }
-                : undefined;
-            })()}
-            activeGoalName={activeGoal?.name ?? null}
-            onSubmitted={handleGoalSubmitted}
-          />
-        ))}
+      {step === 1 && (
+        <GoalSelector
+          submitLabel="Lanjut ke survei risiko"
+          onSubmitted={handleGoalsSelected}
+        />
+      )}
 
       {step === 2 && (
         <RiskSurvey onComplete={handleSurveyComplete} onBack={() => setStep(1)} />

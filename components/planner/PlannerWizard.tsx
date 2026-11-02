@@ -4,15 +4,39 @@ import { useEffect, useState } from "react";
 import { Loader2, AlertCircle, Check } from "lucide-react";
 import BudgetForm, { type BudgetFormValues } from "./BudgetForm";
 import BudgetResultCard from "./BudgetResultCard";
+import GoalSelector, {
+  type GoalOption,
+  type SelectedGoal,
+} from "@/components/goal/GoalSelector";
 import type { GoalBudgetResult } from "@/types/planner";
 
-/** Langkah alur goal-driven: Tujuan → Hasil. */
-type Step = 1 | 2;
+/** Langkah alur goal-driven: Pilih tujuan → Anggaran → Hasil. */
+type Step = 1 | 2 | 3;
 
 const STEP_LABELS: Record<Step, string> = {
   1: "Tujuan",
-  2: "Hasil",
+  2: "Anggaran",
+  3: "Hasil",
 };
+
+/**
+ * Agregasi tujuan terpilih (opsi A, mirror server): total target + horizon
+ * rata-rata tertimbang oleh target. Dipakai untuk memprefill BudgetForm.
+ */
+function aggregateSelected(goals: SelectedGoal[]): {
+  targetAmount: number;
+  horizonMonths: number;
+} | null {
+  if (goals.length === 0) return null;
+  const totalTarget = goals.reduce((s, g) => s + g.targetAmount, 0);
+  if (totalTarget <= 0) return null;
+  const weighted =
+    goals.reduce((s, g) => s + g.targetAmount * g.horizonMonths, 0) / totalTarget;
+  return {
+    targetAmount: totalTarget,
+    horizonMonths: Math.max(1, Math.round(weighted)),
+  };
+}
 
 /**
  * PlannerWizard — orkestrator client alur Planner goal-driven (Req 17.2, 17.3,
@@ -41,15 +65,18 @@ export default function PlannerWizard() {
     number | null
   >(null);
   const [currentSavings, setCurrentSavings] = useState<number | null>(null);
-  // Prefill tujuan dari Active_Goal (via GET /api/budget).
+  // Prefill tujuan — diturunkan dari tujuan terpilih (agregasi opsi A).
   const [defaultTargetAmount, setDefaultTargetAmount] = useState<number | null>(
     null
   );
   const [defaultHorizonMonths, setDefaultHorizonMonths] = useState<number | null>(
     null
   );
+  // Daftar tujuan pengguna (untuk GoalSelector) + tujuan terpilih saat ini.
+  const [goals, setGoals] = useState<GoalOption[]>([]);
+  const [selectedGoals, setSelectedGoals] = useState<SelectedGoal[]>([]);
 
-  // Proses POST /api/budget (langkah 1 → 2).
+  // Proses POST /api/budget.
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GoalBudgetResult | null>(null);
@@ -76,13 +103,47 @@ export default function PlannerWizard() {
           if (typeof savings === "number" && Number.isFinite(savings)) {
             setCurrentSavings(savings);
           }
-          const goalTarget = data?.goalTargetAmount;
-          if (typeof goalTarget === "number" && Number.isFinite(goalTarget)) {
-            setDefaultTargetAmount(goalTarget);
-          }
-          const goalHorizon = data?.goalHorizonMonths;
-          if (typeof goalHorizon === "number" && Number.isFinite(goalHorizon)) {
-            setDefaultHorizonMonths(goalHorizon);
+          // Daftar tujuan untuk pemilih. Bila ada, default pilih tujuan
+          // terbaru; prefill target/horizon diturunkan dari pilihan itu.
+          const list: GoalOption[] = Array.isArray(data?.goals)
+            ? data.goals.filter(
+                (g: unknown): g is GoalOption =>
+                  typeof g === "object" &&
+                  g !== null &&
+                  typeof (g as GoalOption).id === "string" &&
+                  typeof (g as GoalOption).targetAmount === "number" &&
+                  Number.isFinite((g as GoalOption).targetAmount) &&
+                  typeof (g as GoalOption).horizonMonths === "number" &&
+                  Number.isFinite((g as GoalOption).horizonMonths),
+              )
+            : [];
+          setGoals(list);
+
+          if (list.length > 0) {
+            const initialSelection: SelectedGoal[] = [
+              {
+                id: list[0].id,
+                name: list[0].name,
+                targetAmount: list[0].targetAmount,
+                horizonMonths: list[0].horizonMonths,
+              },
+            ];
+            setSelectedGoals(initialSelection);
+            const agg = aggregateSelected(initialSelection);
+            if (agg) {
+              setDefaultTargetAmount(agg.targetAmount);
+              setDefaultHorizonMonths(agg.horizonMonths);
+            }
+          } else {
+            // Fallback: prefill dari tujuan tunggal (backward-compatible).
+            const goalTarget = data?.goalTargetAmount;
+            if (typeof goalTarget === "number" && Number.isFinite(goalTarget)) {
+              setDefaultTargetAmount(goalTarget);
+            }
+            const goalHorizon = data?.goalHorizonMonths;
+            if (typeof goalHorizon === "number" && Number.isFinite(goalHorizon)) {
+              setDefaultHorizonMonths(goalHorizon);
+            }
           }
         }
         // Bila gagal memuat konteks, form tetap dapat diisi manual — bukan
@@ -98,7 +159,22 @@ export default function PlannerWizard() {
     };
   }, []);
 
-  /** Langkah 1 selesai: hitung + simpan anggaran via POST, lalu tampilkan hasil. */
+  /**
+   * Langkah 1 selesai: simpan tujuan terpilih + prefill target/horizon
+   * (agregasi opsi A), lalu lanjut ke form anggaran.
+   */
+  function handleGoalsSelected(selected: SelectedGoal[]) {
+    setSelectedGoals(selected);
+    const agg = aggregateSelected(selected);
+    if (agg) {
+      setDefaultTargetAmount(agg.targetAmount);
+      setDefaultHorizonMonths(agg.horizonMonths);
+    }
+    setError(null);
+    setStep(2);
+  }
+
+  /** Langkah 2 selesai: hitung + simpan anggaran via POST, lalu tampilkan hasil. */
   async function handleFormSubmit(values: BudgetFormValues) {
     setSubmitting(true);
     setError(null);
@@ -106,6 +182,9 @@ export default function PlannerWizard() {
     setLastSubmittedValues(values);
 
     try {
+      // Bila ada tujuan terpilih, kirim daftar `goals` agar server mengagregasi
+      // (opsi A) + menautkan per-tujuan. Target/horizon dari form tetap
+      // dikirim sebagai fallback/override manual (dipakai saat `goals` kosong).
       const res = await fetch("/api/budget", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -114,13 +193,22 @@ export default function PlannerWizard() {
           monthlyExpense: values.monthlyExpense,
           targetAmount: values.targetAmount,
           horizonMonths: values.horizonMonths,
+          goals:
+            selectedGoals.length > 0
+              ? selectedGoals.map((g) => ({
+                  id: g.id,
+                  name: g.name,
+                  targetAmount: g.targetAmount,
+                  horizonMonths: g.horizonMonths,
+                }))
+              : undefined,
         }),
       });
 
       if (res.ok) {
         const data = (await res.json()) as GoalBudgetResult;
         setResult(data);
-        setStep(2);
+        setStep(3);
         return;
       }
 
@@ -157,6 +245,10 @@ export default function PlannerWizard() {
     setDefaultTargetAmount(newValues.targetAmount);
     setDefaultHorizonMonths(newValues.horizonMonths);
 
+    // Trade-off mengubah target/horizon secara manual → lepaskan tautan tujuan
+    // agar nilai baru (bukan agregasi tujuan) yang dipakai server.
+    setSelectedGoals([]);
+
     await handleFormSubmit(newValues);
   }
 
@@ -173,7 +265,7 @@ export default function PlannerWizard() {
     <div className="flex flex-col gap-6">
       {/* Stepper indikator */}
       <ol className="flex items-center gap-2" aria-label="Langkah perencanaan anggaran">
-        {([1, 2] as Step[]).map((s, i) => {
+        {([1, 2, 3] as Step[]).map((s, i) => {
           const active = step === s;
           const done = step > s;
           return (
@@ -197,13 +289,14 @@ export default function PlannerWizard() {
               >
                 {STEP_LABELS[s]}
               </span>
-              {i < 1 && <span className="h-px flex-1 bg-border" />}
+              {i < 2 && <span className="h-px flex-1 bg-border" />}
             </li>
           );
         })}
       </ol>
 
-      {/* Langkah 1: isi tujuan */}
+      {/* Langkah 1: pilih tujuan (multi-tujuan). Tanpa tujuan tersimpan,
+          langsung lanjut ke form anggaran dengan input manual. */}
       {step === 1 && (
         <div className="flex flex-col gap-4">
           {loadingContext ? (
@@ -211,7 +304,14 @@ export default function PlannerWizard() {
               <Loader2 className="h-6 w-6 animate-spin text-[var(--accent)]" />
               <p className="text-sm text-muted">Memuat data profil Anda...</p>
             </div>
+          ) : goals.length > 0 ? (
+            <GoalSelector
+              submitLabel="Lanjut ke anggaran"
+              initialGoals={goals}
+              onSubmitted={handleGoalsSelected}
+            />
           ) : (
+            // Tanpa tujuan tersimpan: lewati pemilih, isi anggaran manual.
             <>
               <BudgetForm
                 defaultMonthlyIncome={defaultMonthlyIncome}
@@ -233,8 +333,48 @@ export default function PlannerWizard() {
         </div>
       )}
 
-      {/* Langkah 2: hasil */}
+      {/* Langkah 2: isi anggaran (prefill dari tujuan terpilih) */}
       {step === 2 && (
+        <div className="flex flex-col gap-4">
+          <BudgetForm
+            defaultMonthlyIncome={defaultMonthlyIncome}
+            defaultMonthlyExpense={defaultMonthlyExpense}
+            currentSavings={currentSavings}
+            defaultTargetAmount={defaultTargetAmount}
+            defaultHorizonMonths={defaultHorizonMonths}
+            onSubmit={handleFormSubmit}
+            submitting={submitting}
+          />
+          {selectedGoals.length > 0 && (
+            <p className="rounded-xl bg-accent-soft px-3.5 py-2.5 text-xs leading-relaxed text-muted">
+              Target & jangka waktu terisi dari{" "}
+              {selectedGoals.length === 1
+                ? "tujuan yang Anda pilih"
+                : `${selectedGoals.length} tujuan gabungan`}
+              . Anda masih bisa menyesuaikannya untuk skenario ini.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setStep(1);
+            }}
+            className="flex h-10 items-center justify-center gap-1.5 self-start rounded-xl border border-border bg-background px-4 text-sm font-medium text-muted transition-colors hover:text-foreground"
+          >
+            Kembali ke pemilihan tujuan
+          </button>
+          {error && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Langkah 3: hasil */}
+      {step === 3 && (
         <>
           {submitting && (
             <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-surface px-5 py-12 text-center">
