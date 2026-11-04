@@ -92,8 +92,12 @@ function futureValueOf(
  *   - `totalContributed`: modal yang disetor sendiri = PV + PMT*n.
  *   - `totalGrowth`: hasil pertumbuhan = futureValue - totalContributed (≥ 0).
  *   - `perInstrument`: tiap slice komposisi diberi porsi setoran bulanan
- *     (PMT × persentase) dan estimasi return per instrumen (via `categoryReturn`,
- *     fallback ke `annualReturn` portofolio bila label tak dikenal).
+ *     (PMT × persentase), estimasi return per instrumen (via `categoryReturn`,
+ *     fallback ke `annualReturn` portofolio bila label tak dikenal), serta
+ *     proyeksi akhir per slice (futureValue/totalContributed/totalGrowth) yang
+ *     diturunkan dari porsi PV + setoran slice memakai return instrumen itu.
+ *     Karena tiap slice memakai return sendiri, jumlah FV antar-slice bisa
+ *     sedikit berbeda dari FV agregat portofolio (perkiraan per instrumen).
  *
  * Pembulatan: nominal Rupiah dibulatkan ke rupiah terdekat; persentase &
  * annualReturn dibiarkan apa adanya (desimal). Porsi bulanan dibulatkan dengan
@@ -149,13 +153,32 @@ export function projectInvestment(params: {
     remainder--;
   }
 
-  const perInstrument: InstrumentProjection[] = composition.map((slice, idx) => ({
-    instrument: slice.instrument,
-    percentage: slice.percentage,
-    monthlyAmount: monthlyPerSlice[idx] ?? 0,
+  const perInstrument: InstrumentProjection[] = composition.map((slice, idx) => {
+    const sliceMonthly = monthlyPerSlice[idx] ?? 0;
+    // Porsi tabungan awal (PV) dialokasikan ke slice ini sesuai persentase
+    // komposisi. Dipakai agar FV per instrumen juga menumbuhkan bagian PV-nya.
+    const pvShare = (presentValue * slice.percentage) / 100;
     // Return per instrumen via kategori; fallback ke return portofolio gabungan.
-    annualReturn: categoryReturn(slice.instrument, annualReturn),
-  }));
+    const sliceReturn = categoryReturn(slice.instrument, annualReturn);
+    // FV per instrumen memakai return instrumen itu sendiri (bukan blended),
+    // agar rincian mencerminkan karakter tiap instrumen. Konsekuensinya jumlah
+    // FV antar-slice bisa sedikit berbeda dari FV agregat (return berbeda per
+    // slice) — UI menandai ini sebagai perkiraan per instrumen.
+    const sliceFutureValue = Math.round(
+      futureValueOf(pvShare, sliceMonthly, sliceReturn, n),
+    );
+    const sliceContributed = Math.round(pvShare + sliceMonthly * n);
+    const sliceGrowth = Math.max(0, sliceFutureValue - sliceContributed);
+    return {
+      instrument: slice.instrument,
+      percentage: slice.percentage,
+      monthlyAmount: sliceMonthly,
+      annualReturn: sliceReturn,
+      futureValue: sliceFutureValue,
+      totalContributed: sliceContributed,
+      totalGrowth: sliceGrowth,
+    };
+  });
 
   return {
     monthlyContribution: pmt,

@@ -40,6 +40,9 @@ export default function InvestmentWizard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recommendation, setRecommendation] = useState<InvestmentRecommendation | null>(null);
+  // Sisa kas bulanan (pemasukan − pengeluaran) dari profil, untuk peringatan
+  // keterjangkauan setoran. null = belum/ tidak diketahui (tak tampilkan).
+  const [monthlySurplus, setMonthlySurplus] = useState<number | null>(null);
 
   /** Langkah 1 selesai: simpan tujuan terpilih, lanjut ke survei. */
   function handleGoalsSelected(goals: SelectedGoal[]) {
@@ -62,8 +65,11 @@ export default function InvestmentWizard() {
     setRecommendation(null);
 
     try {
-      // Ambil currentSavings dari profil (gate memastikan profil ada).
+      // Ambil currentSavings dari profil (gate memastikan profil ada). Sekalian
+      // ambil pemasukan & pengeluaran untuk menghitung sisa kas bulanan, dipakai
+      // peringatan keterjangkauan setoran di RecommendationCard.
       let currentSavings = 0;
+      let surplus: number | null = null;
       const profileRes = await fetch("/api/profile", { method: "GET" });
       if (profileRes.ok) {
         const data = await profileRes.json();
@@ -71,7 +77,18 @@ export default function InvestmentWizard() {
         if (typeof savings === "number" && Number.isFinite(savings)) {
           currentSavings = savings;
         }
+        const income = data?.profile?.income;
+        const expense = data?.profile?.expense;
+        if (
+          typeof income === "number" &&
+          Number.isFinite(income) &&
+          typeof expense === "number" &&
+          Number.isFinite(expense)
+        ) {
+          surplus = income - expense;
+        }
       }
+      setMonthlySurplus(surplus);
 
       const res = await fetch("/api/recommendation", {
         method: "POST",
@@ -118,6 +135,7 @@ export default function InvestmentWizard() {
     setStep(1);
     setSelectedGoals([]);
     setRecommendation(null);
+    setMonthlySurplus(null);
     setError(null);
     setLoading(false);
   }
@@ -208,7 +226,11 @@ export default function InvestmentWizard() {
           )}
 
           {!loading && !error && recommendation && (
-            <RecommendationCard recommendation={recommendation} onRestart={handleRestart} />
+            <RecommendationCard
+              recommendation={recommendation}
+              monthlySurplus={monthlySurplus}
+              onRestart={handleRestart}
+            />
           )}
         </>
       )}

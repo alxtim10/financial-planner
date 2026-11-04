@@ -87,6 +87,40 @@ describe("projectInvestment", () => {
     expect(saham.annualReturn).toBeGreaterThan(emas.annualReturn);
   });
 
+  it("proyeksi per instrumen: FV = contributed + growth, dan growth ≥ 0", () => {
+    const proj = projectInvestment({
+      presentValue: 10_000_000,
+      monthlyContribution: 1_000_000,
+      annualReturn: 0.09,
+      horizonMonths: 60,
+      composition,
+    });
+    for (const p of proj.perInstrument) {
+      expect(p.futureValue).toBe(p.totalContributed + p.totalGrowth);
+      expect(p.totalGrowth).toBeGreaterThanOrEqual(0);
+      // Modal disetor = porsi PV + setoran*n (dibulatkan), harus > 0 di sini.
+      expect(p.totalContributed).toBeGreaterThan(0);
+    }
+  });
+
+  it("per instrumen dengan return lebih tinggi menghasilkan FV lebih besar untuk porsi setara", () => {
+    // Komposisi 50/50 agar porsi PV & setoran sama; beda hanya return kategori.
+    const proj = projectInvestment({
+      presentValue: 0,
+      monthlyContribution: 1_000_000,
+      annualReturn: 0.09,
+      horizonMonths: 120,
+      composition: [
+        { instrument: "Saham/Indeks", percentage: 50 },
+        { instrument: "Emas", percentage: 50 },
+      ],
+    });
+    const saham = proj.perInstrument.find((p) => p.instrument === "Saham/Indeks")!;
+    const emas = proj.perInstrument.find((p) => p.instrument === "Emas")!;
+    expect(saham.monthlyAmount).toBe(emas.monthlyAmount);
+    expect(saham.futureValue).toBeGreaterThan(emas.futureValue);
+  });
+
   it("menolak input tidak valid", () => {
     expect(() =>
       projectInvestment({

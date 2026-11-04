@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, Check, Sparkles } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 import { prisma } from "@/lib/db";
+import PageBackNav from "@/components/PageBackNav";
 import { getCurrentUserId } from "@/lib/auth/session";
 import { isPro, chatDailyLimit, PRO_FEATURES } from "@/lib/billing/plan";
 import { priceTiers } from "@/lib/billing/pricing";
@@ -33,13 +34,7 @@ export default async function UpgradePage() {
   return (
     <div className="min-h-dvh bg-background">
       <div className="mx-auto w-full max-w-xl px-4 py-10 sm:py-14">
-        <Link
-          href="/"
-          className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Kembali ke dashboard
-        </Link>
+        <PageBackNav />
 
         <header className="mb-6 flex flex-col gap-3">
           <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-[var(--accent)]">

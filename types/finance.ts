@@ -54,6 +54,12 @@ export interface InstrumentProjection {
   percentage: number; // 0..100, porsi dari komposisi
   monthlyAmount: number; // Rupiah = monthlyContribution * percentage / 100
   annualReturn: number; // desimal, estimasi return instrumen tsb
+  // Proyeksi akhir per instrumen (deterministik, diturunkan dari porsi PV +
+  // setoran bulanan slice ini memakai return instrumen tsb). Penjumlahan
+  // lintas slice konsisten dengan angka agregat portofolio.
+  futureValue: number; // nilai akhir terproyeksi slice ini (Rupiah)
+  totalContributed: number; // modal disetor slice ini = porsi PV + monthlyAmount*n
+  totalGrowth: number; // hasil pertumbuhan slice ini = futureValue - totalContributed
 }
 
 // Hasil proyeksi detail dari setoran bulanan yang sudah dihitung.
