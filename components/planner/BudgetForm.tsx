@@ -48,6 +48,14 @@ interface BudgetFormProps {
    * Pengguna boleh menimpa (override satu kali) — tidak mengubah tujuan tersimpan.
    */
   defaultHorizonMonths?: number | null;
+  /**
+   * Bila `true`, target & jangka waktu BERASAL dari tujuan yang dipilih di
+   * langkah sebelumnya (multi-tujuan). Field keduanya tidak ditampilkan sebagai
+   * input yang bisa diubah — hanya ringkasan read-only — karena server memakai
+   * agregasi tujuan (opsi A) dan mengabaikan nilai form ini. Form hanya meminta
+   * pemasukan + pengeluaran.
+   */
+  goalLocked?: boolean;
   /** Dipanggil dengan nilai terparsir saat form valid dan disubmit. */
   onSubmit: (values: BudgetFormValues) => void;
   /** Menonaktifkan tombol submit selama proses berlangsung. */
@@ -113,6 +121,7 @@ export default function BudgetForm({
   currentSavings,
   defaultTargetAmount,
   defaultHorizonMonths,
+  goalLocked = false,
   onSubmit,
   submitting = false,
 }: BudgetFormProps) {
@@ -153,10 +162,15 @@ export default function BudgetForm({
     if (incomeErr) next.monthlyIncome = incomeErr;
     const expenseErr = validateMonthlyExpense(monthlyExpense);
     if (expenseErr) next.monthlyExpense = expenseErr;
-    const targetErr = validateTargetAmount(targetAmount);
-    if (targetErr) next.targetAmount = targetErr;
-    const horizonErr = validateHorizonMonths(horizonMonths);
-    if (horizonErr) next.horizonMonths = horizonErr;
+    // Target & jangka waktu hanya divalidasi di mode manual. Saat terkunci
+    // (dari tujuan terpilih), nilainya berasal dari prefill & server memakai
+    // agregasi tujuan, jadi tidak perlu divalidasi di sini.
+    if (!goalLocked) {
+      const targetErr = validateTargetAmount(targetAmount);
+      if (targetErr) next.targetAmount = targetErr;
+      const horizonErr = validateHorizonMonths(horizonMonths);
+      if (horizonErr) next.horizonMonths = horizonErr;
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -283,100 +297,141 @@ export default function BudgetForm({
         )}
       </div>
 
-      {/* Target_Amount */}
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="targetAmount" className="text-sm font-medium text-foreground">
-          Target tabungan
-        </label>
-        <div
-          className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(0,180,216,0.12)] ${
-            errors.targetAmount
-              ? "border-red-400"
-              : "border-border focus-within:border-[var(--accent)]/50"
-          }`}
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
-            <Target className="h-4 w-4" />
+      {goalLocked ? (
+        /* Mode terkunci: target & jangka waktu DARI tujuan terpilih (langkah
+           sebelumnya). Tampilkan ringkasan read-only — bukan input — karena
+           server memakai agregasi tujuan dan mengabaikan nilai form ini. */
+        <div className="flex flex-col gap-2 rounded-xl border border-border bg-background/60 px-3.5 py-3">
+          <span className="text-xs font-medium text-muted">
+            Dari tujuan yang Anda pilih
           </span>
-          <span className="shrink-0 text-sm text-muted">Rp</span>
-          <input
-            id="targetAmount"
-            name="targetAmount"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            value={targetAmount}
-            onChange={(e) => {
-              setTargetAmount(formatThousands(e.target.value));
-              if (errors.targetAmount)
-                setErrors((p) => ({ ...p, targetAmount: undefined }));
-            }}
-            placeholder="0"
-            aria-invalid={errors.targetAmount ? true : undefined}
-            aria-describedby={
-              errors.targetAmount ? "targetAmount-error" : "targetAmount-hint"
-            }
-            className="min-w-0 flex-1 bg-transparent text-[0.9375rem] text-foreground placeholder:text-muted focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
+                <Target className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-xs text-muted">Target</div>
+                <div className="truncate text-sm font-medium text-foreground">
+                  {defaultTargetAmount != null && Number.isFinite(defaultTargetAmount)
+                    ? formatRupiah(defaultTargetAmount)
+                    : "-"}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
+                <CalendarClock className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-xs text-muted">Jangka waktu</div>
+                <div className="truncate text-sm font-medium text-foreground">
+                  {defaultHorizonMonths != null && Number.isFinite(defaultHorizonMonths)
+                    ? `${defaultHorizonMonths} bulan`
+                    : "-"}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        {errors.targetAmount ? (
-          <p id="targetAmount-error" className="text-xs text-red-500">
-            {errors.targetAmount}
-          </p>
-        ) : (
-          <p id="targetAmount-hint" className="text-xs text-muted">
-            {targetPreview ? targetPreview : "Nominal yang ingin Anda kumpulkan."}
-          </p>
-        )}
-      </div>
+      ) : (
+        <>
+          {/* Target_Amount */}
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="targetAmount" className="text-sm font-medium text-foreground">
+              Target tabungan
+            </label>
+            <div
+              className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(0,180,216,0.12)] ${
+                errors.targetAmount
+                  ? "border-red-400"
+                  : "border-border focus-within:border-[var(--accent)]/50"
+              }`}
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
+                <Target className="h-4 w-4" />
+              </span>
+              <span className="shrink-0 text-sm text-muted">Rp</span>
+              <input
+                id="targetAmount"
+                name="targetAmount"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={targetAmount}
+                onChange={(e) => {
+                  setTargetAmount(formatThousands(e.target.value));
+                  if (errors.targetAmount)
+                    setErrors((p) => ({ ...p, targetAmount: undefined }));
+                }}
+                placeholder="0"
+                aria-invalid={errors.targetAmount ? true : undefined}
+                aria-describedby={
+                  errors.targetAmount ? "targetAmount-error" : "targetAmount-hint"
+                }
+                className="min-w-0 flex-1 bg-transparent text-[0.9375rem] text-foreground placeholder:text-muted focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+            </div>
+            {errors.targetAmount ? (
+              <p id="targetAmount-error" className="text-xs text-red-500">
+                {errors.targetAmount}
+              </p>
+            ) : (
+              <p id="targetAmount-hint" className="text-xs text-muted">
+                {targetPreview ? targetPreview : "Nominal yang ingin Anda kumpulkan."}
+              </p>
+            )}
+          </div>
 
-      {/* Horizon_Months */}
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="horizonMonths" className="text-sm font-medium text-foreground">
-          Jangka waktu <span className="font-normal text-muted">(bulan)</span>
-        </label>
-        <div
-          className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(0,180,216,0.12)] ${
-            errors.horizonMonths
-              ? "border-red-400"
-              : "border-border focus-within:border-[var(--accent)]/50"
-          }`}
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
-            <CalendarClock className="h-4 w-4" />
-          </span>
-          <input
-            id="horizonMonths"
-            name="horizonMonths"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            step={1}
-            value={horizonMonths}
-            onChange={(e) => {
-              setHorizonMonths(e.target.value);
-              if (errors.horizonMonths)
-                setErrors((p) => ({ ...p, horizonMonths: undefined }));
-            }}
-            placeholder="0"
-            aria-invalid={errors.horizonMonths ? true : undefined}
-            aria-describedby={
-              errors.horizonMonths ? "horizonMonths-error" : "horizonMonths-hint"
-            }
-            className="min-w-0 flex-1 bg-transparent text-[0.9375rem] text-foreground placeholder:text-muted focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          />
-          <span className="shrink-0 text-sm text-muted">bulan</span>
-        </div>
-        {errors.horizonMonths ? (
-          <p id="horizonMonths-error" className="text-xs text-red-500">
-            {errors.horizonMonths}
-          </p>
-        ) : (
-          <p id="horizonMonths-hint" className="text-xs text-muted">
-            Berapa bulan untuk mencapai target ini.
-          </p>
-        )}
-      </div>
+          {/* Horizon_Months */}
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="horizonMonths" className="text-sm font-medium text-foreground">
+              Jangka waktu <span className="font-normal text-muted">(bulan)</span>
+            </label>
+            <div
+              className={`flex items-center gap-2.5 rounded-xl border bg-background px-3 py-2.5 transition-shadow focus-within:shadow-[0_2px_16px_rgba(0,180,216,0.12)] ${
+                errors.horizonMonths
+                  ? "border-red-400"
+                  : "border-border focus-within:border-[var(--accent)]/50"
+              }`}
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[var(--accent)]">
+                <CalendarClock className="h-4 w-4" />
+              </span>
+              <input
+                id="horizonMonths"
+                name="horizonMonths"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                value={horizonMonths}
+                onChange={(e) => {
+                  setHorizonMonths(e.target.value);
+                  if (errors.horizonMonths)
+                    setErrors((p) => ({ ...p, horizonMonths: undefined }));
+                }}
+                placeholder="0"
+                aria-invalid={errors.horizonMonths ? true : undefined}
+                aria-describedby={
+                  errors.horizonMonths ? "horizonMonths-error" : "horizonMonths-hint"
+                }
+                className="min-w-0 flex-1 bg-transparent text-[0.9375rem] text-foreground placeholder:text-muted focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <span className="shrink-0 text-sm text-muted">bulan</span>
+            </div>
+            {errors.horizonMonths ? (
+              <p id="horizonMonths-error" className="text-xs text-red-500">
+                {errors.horizonMonths}
+              </p>
+            ) : (
+              <p id="horizonMonths-hint" className="text-xs text-muted">
+                Berapa bulan untuk mencapai target ini.
+              </p>
+            )}
+          </div>
+        </>
+      )}
 
       {/* currentSavings — konteks READ-ONLY (Req 17.3) */}
       {savings != null && (
