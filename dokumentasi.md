@@ -147,6 +147,15 @@ Direktori konsultan kini menangkap **lead** permintaan konsultasi (bukan sekadar
 - **UI** (`components/consultant/BookingRequest.tsx`): tombol "Minta konsultasi" membuka form (pesan + checkbox izin snapshot) di tiap kartu konsultan; tombol "Hubungi" eksternal tetap ada.
 - **Status lead:** `Booking.status` (`requested` default | `contacted` | `closed`) untuk tindak lanjut manual. Belum ada panel admin daftar booking.
 
+### 3.6 Partner investasi (placement kontekstual)
+
+Lapisan monetisasi kedua: mengarahkan pengguna ke produk partner yang relevan dengan komposisi rekomendasi. **Terpisah tegas dari Allocation_Engine** — placement TIDAK mengubah alokasi, urutan instrumen, maupun estimasi return (angka tetap deterministik, bukan dari siapa yang beriklan).
+
+- **Data statis + pure helper** di `lib/partners.ts` (`PARTNER_OFFERS` ilustratif + `getPartnerOffers(category)`), pola sama seperti `lib/consultants.ts`. Tiap tawaran memetakan ke satu `InstrumentCategory` kanonik + membawa `disclosure` transparansi. **ILUSTRATIF/placeholder** (nama produk & link referral) — butuh perjanjian partner + review compliance (OJK) sebelum produksi.
+- **Dari tombol, bukan inline.** `RecommendationCard` menampilkan **satu tombol** "Mulai berinvestasi lewat partner" (hanya bila ada tawaran relevan dengan komposisi), lengkap disclaimer bahwa tawaran dari partner dan **tidak memengaruhi perhitungan**. Kategori instrumen pada komposisi diteruskan lewat query `?c=RDPU,Saham/Indeks`. Klik mencatat event `partner_placement_clicked`.
+- **Halaman `/partners`** (`app/partners/page.tsx`) merender komponen reusable `components/partner/PartnerOffers.tsx`: memarse kategori dari query (hanya kategori kanonik, dedupe, urut), memetakan ke tawaran via `getPartnerOffers`, dan menampilkannya dengan penanda "Konten partner". Tanpa query valid → tampilkan semua tawaran. Klik tiap tawaran juga mencatat `partner_placement_clicked`.
+- Event `partner_placement_clicked` sudah kanonik di `lib/analytics/events.ts`.
+
 ### 3.1 Autentikasi (auth demo — username + password)
 
 Auth sederhana untuk demo app, tanpa dependency tambahan (hanya Node `crypto`):
@@ -156,6 +165,8 @@ Auth sederhana untuk demo app, tanpa dependency tambahan (hanya Node `crypto`):
 - **Isolasi data:** semua API route (`/api/profile`, `/api/goal`, `/api/recommendation`, `/api/budget`) mengambil `userId` **dari session**, bukan dari body (body `userId` dihapus — dulu bisa dipalsukan klien). Pembacaan server-side (`getLatestProfile(userId)`, `getActiveGoal(userId)`, `getFinancialTwinContext()`) difilter per `userId`. Tanpa session → API balas `401`, halaman redirect ke `/login`.
 - **Tanpa registrasi mandiri:** akun dibuat lewat **seed** (`prisma/seed.ts`). Default `demo` / `demo1234` (dapat diubah via env `SEED_USERNAME`/`SEED_PASSWORD`). Seed juga **mengadopsi baris data lama** (`userId = null`) ke akun demo agar tetap terlihat setelah login.
 - **Batas (disengaja, karena demo):** belum ada registrasi mandiri, reset password, rate limiting login, atau CSRF token khusus.
+
+> ⚠️ **MODE BYPASS LOGIN (demo satu-pengguna, aktif sekarang).** `POST /api/auth/login` **tidak lagi memverifikasi password** (scrypt di-skip). Karena demo hanya satu pengguna, login **selalu diarahkan ke akun demo** (`SEED_USERNAME`, default `demo`) apa pun input form — username/password (termasuk kosong) diabaikan; bila akun `demo` belum ada, dibuat otomatis sekali. Lookup user diberi retry singkat agar tahan koneksi Supabase yang cold, dan kegagalan DB kini balas `503` (bukan menyamar sebagai "password salah"). Session tetap JWT sungguhan (data tetap ter-scope per `userId`). Helper hash (`lib/auth/password.ts`) & `verifyPassword` **masih ada** — **kembalikan verifikasi password di route login sebelum produksi / multi-pengguna.**
 
 ---
 

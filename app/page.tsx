@@ -21,6 +21,7 @@ import { prisma } from "@/lib/db";
 import GoalsListCard from "@/components/goal/GoalsListCard";
 import EmergencyFundCard from "@/components/profile/EmergencyFundCard";
 import LogoutButton from "@/components/auth/LogoutButton";
+import HomeChatBar from "@/components/HomeChatBar";
 
 // Halaman ini membaca Financial_Profile dari DB (Prisma) saat request.
 // Paksa render dinamis agar `next build` tidak mencoba melakukan query DB
@@ -99,6 +100,9 @@ export default async function Home() {
             kanan atas.
           </p>
         </header>
+
+        {/* ── Chat bar: entry point tambahan ke asisten AI ────── */}
+        <HomeChatBar />
 
         {/* ── Ringkasan status profil ─────────────────────────── */}
         <section

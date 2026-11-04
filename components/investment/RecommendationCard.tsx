@@ -13,6 +13,8 @@ import {
   Target,
   Store,
   ArrowRight,
+  Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 import type {
   AllocationSlice,
@@ -94,8 +96,12 @@ export interface InvestmentRecommendation {
   composition: AllocationSlice[];
   annualReturn: number; // desimal, mis. 0.095 → 9,5%
   monthlyContribution: number; // Rupiah (total lintas tujuan)
-  /** Proyeksi detail (opsional demi backward-compat bila API lama). */
-  projection?: InvestmentProjection;
+  /**
+   * Proyeksi detail (opsional demi backward-compat bila API lama). Untuk plan
+   * free, `perInstrument` dikosongkan server-side dan `perInstrumentLocked`
+   * bernilai true (dipakai untuk ajakan upgrade, bukan untuk menghitung angka).
+   */
+  projection?: InvestmentProjection & { perInstrumentLocked?: boolean };
   /** Multi-tujuan (opsional demi backward-compat). */
   goalCount?: number;
   totalTargetAmount?: number;
@@ -105,6 +111,12 @@ export interface InvestmentRecommendation {
 
 interface RecommendationCardProps {
   recommendation: InvestmentRecommendation;
+  /**
+   * Sisa kas bulanan pengguna (pemasukan − pengeluaran) dari profil. Dipakai
+   * untuk memperingatkan bila setoran yang direkomendasikan melebihi sisa kas.
+   * `null`/`undefined` → data tak tersedia, peringatan tidak ditampilkan.
+   */
+  monthlySurplus?: number | null;
   /** Mulai ulang alur dari awal (opsional). */
   onRestart?: () => void;
 }
@@ -140,6 +152,7 @@ function formatRupiah(value: number): string {
  */
 export default function RecommendationCard({
   recommendation,
+  monthlySurplus,
   onRestart,
 }: RecommendationCardProps) {
   const {
@@ -150,6 +163,17 @@ export default function RecommendationCard({
     projection,
     perGoal,
   } = recommendation;
+
+  // Peringatan keterjangkauan: setoran yang direkomendasikan melebihi sisa kas
+  // bulanan pengguna (pemasukan − pengeluaran). Hanya dihitung bila data sisa
+  // kas tersedia (number finite). Nilai negatif pun relevan (pengeluaran sudah
+  // melebihi pemasukan), sehingga selisih ikut ditampilkan.
+  const hasSurplusData =
+    typeof monthlySurplus === "number" && Number.isFinite(monthlySurplus);
+  const overBudget = hasSurplusData && monthlyContribution > monthlySurplus;
+  const surplusShortfall = overBudget
+    ? monthlyContribution - monthlySurplus
+    : 0;
   // Breakdown multi-tujuan hanya ditampilkan bila >1 tujuan direncanakan.
   const multiGoal = Array.isArray(perGoal) && perGoal.length > 1;
   // Instrumen mana yang penjelasannya sedang dibuka (null = tidak ada).
@@ -159,6 +183,9 @@ export default function RecommendationCard({
   const perInstrumentMap = new Map(
     (projection?.perInstrument ?? []).map((p) => [p.instrument, p]),
   );
+  // True bila rincian per-instrumen tersedia (Pro). Dipakai untuk menampilkan
+  // catatan proyeksi per instrumen.
+  const hasPerInstrumentDetail = perInstrumentMap.size > 0;
 
   // Kategori instrumen kanonik yang MUNCUL di komposisi (dedupe, pertahankan
   // urutan). Dipakai untuk: (a) menentukan apakah ada tawaran partner relevan,
@@ -187,6 +214,13 @@ export default function RecommendationCard({
     trackClientEvent("partner_placement_clicked", {
       categories: partnerCategories,
       source: "recommendation_cta",
+    });
+  }
+
+  /** Catat klik ajakan upgrade dari kartu rekomendasi (fire-and-forget). */
+  function handleUpgradeCtaClick() {
+    trackClientEvent("upgrade_clicked", {
+      source: "recommendation_per_instrument_locked",
     });
   }
 
@@ -225,6 +259,28 @@ export default function RecommendationCard({
             </span>
           </div>
         </div>
+
+        {/* Peringatan keterjangkauan: setoran melebihi sisa kas bulanan.
+            Edukatif, tidak memblokir — pengguna tetap melihat rekomendasi. */}
+        {overBudget && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3.5 dark:border-amber-500/40 dark:bg-amber-500/10">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                Setoran ini melebihi sisa kas bulanan Anda
+              </p>
+              <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-200/90">
+                Setoran yang direkomendasikan{" "}
+                <span className="font-medium">{formatRupiah(monthlyContribution)}/bln</span>, sedangkan
+                sisa kas bulanan Anda (pemasukan − pengeluaran) hanya{" "}
+                <span className="font-medium">{formatRupiah(monthlySurplus as number)}/bln</span> —
+                kurang <span className="font-medium">{formatRupiah(surplusShortfall)}/bln</span>.
+                Pertimbangkan memperpanjang jangka waktu, menurunkan target, atau menyesuaikan
+                pengeluaran agar rencana ini lebih realistis.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Rincian setoran per tujuan (hanya saat >1 tujuan direncanakan) */}
         {multiGoal && perGoal && (
@@ -310,6 +366,32 @@ export default function RecommendationCard({
           </div>
         )}
 
+        {/* Ajakan upgrade: rincian per-instrumen terkunci untuk plan free.
+            Hanya CTA (tidak memengaruhi angka apa pun). */}
+        {projection?.perInstrumentLocked && (
+          <Link
+            href="/upgrade"
+            onClick={handleUpgradeCtaClick}
+            className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-[var(--accent)]/40 bg-accent-soft px-4 py-3.5 transition-colors hover:border-[var(--accent)]"
+          >
+            <span className="flex min-w-0 items-center gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] text-white">
+                <Sparkles className="h-4 w-4" />
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="text-sm font-semibold text-foreground">
+                  Lihat rincian per instrumen
+                </span>
+                <span className="text-xs leading-snug text-muted">
+                  Dengan Pro, lihat setoran bulanan & estimasi return untuk tiap
+                  instrumen di komposisi Anda.
+                </span>
+              </span>
+            </span>
+            <ArrowRight className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+          </Link>
+        )}
+
         {/* Komposisi alokasi */}
         <div className="flex flex-col gap-3">
           <span className="text-sm font-medium text-foreground">Komposisi alokasi</span>
@@ -374,6 +456,36 @@ export default function RecommendationCard({
                       )}
                     </span>
                   </div>
+                  {/* Proyeksi akhir per instrumen (hanya tersedia untuk Pro,
+                      saat detail per-instrumen terisi). */}
+                  {detail && (
+                    <div className="ml-4.5 grid grid-cols-3 gap-2 rounded-lg border border-border bg-background px-3 py-2.5">
+                      <span className="flex flex-col gap-0.5">
+                        <span className="text-[10px] uppercase tracking-wide text-muted">
+                          Terkumpul
+                        </span>
+                        <span className="text-xs font-medium tabular-nums text-foreground">
+                          {formatRupiah(detail.futureValue)}
+                        </span>
+                      </span>
+                      <span className="flex flex-col gap-0.5">
+                        <span className="text-[10px] uppercase tracking-wide text-muted">
+                          Disetor
+                        </span>
+                        <span className="text-xs font-medium tabular-nums text-foreground">
+                          {formatRupiah(detail.totalContributed)}
+                        </span>
+                      </span>
+                      <span className="flex flex-col gap-0.5">
+                        <span className="text-[10px] uppercase tracking-wide text-muted">
+                          Pertumbuhan
+                        </span>
+                        <span className="text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
+                          {formatRupiah(detail.totalGrowth)}
+                        </span>
+                      </span>
+                    </div>
+                  )}
                   {info && isOpen && (
                     <div className="ml-4.5 rounded-lg border border-border bg-background px-3 py-2.5">
                       <p className="text-xs font-medium text-foreground">
@@ -393,6 +505,14 @@ export default function RecommendationCard({
             Ketuk ikon <span className="font-medium text-foreground">i</span> di
             samping tiap instrumen untuk penjelasan singkatnya.
           </p>
+          {hasPerInstrumentDetail && (
+            <p className="text-xs leading-relaxed text-muted">
+              Proyeksi per instrumen (terkumpul/disetor/pertumbuhan) memakai
+              estimasi return masing-masing instrumen, jadi totalnya bisa sedikit
+              berbeda dari angka gabungan di atas. Belum memperhitungkan
+              pajak/biaya.
+            </p>
+          )}
         </div>
 
         {onRestart && (

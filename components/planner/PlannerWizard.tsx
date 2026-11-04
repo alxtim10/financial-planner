@@ -174,12 +174,24 @@ export default function PlannerWizard() {
     setStep(2);
   }
 
-  /** Langkah 2 selesai: hitung + simpan anggaran via POST, lalu tampilkan hasil. */
-  async function handleFormSubmit(values: BudgetFormValues) {
+  /**
+   * Langkah 2 selesai: hitung + simpan anggaran via POST, lalu tampilkan hasil.
+   *
+   * `goalsOverride` memungkinkan pemanggil menentukan daftar tujuan secara
+   * eksplisit (dipakai trade-off: kirim `[]` agar server memakai target/horizon
+   * manual, bukan agregasi tujuan). Bila tidak disuplai → pakai `selectedGoals`.
+   * Ini menghindari membaca state `selectedGoals` yang belum ter-update (async).
+   */
+  async function handleFormSubmit(
+    values: BudgetFormValues,
+    goalsOverride?: SelectedGoal[],
+  ) {
     setSubmitting(true);
     setError(null);
     setResult(null);
     setLastSubmittedValues(values);
+
+    const effectiveGoals = goalsOverride ?? selectedGoals;
 
     try {
       // Bila ada tujuan terpilih, kirim daftar `goals` agar server mengagregasi
@@ -194,8 +206,8 @@ export default function PlannerWizard() {
           targetAmount: values.targetAmount,
           horizonMonths: values.horizonMonths,
           goals:
-            selectedGoals.length > 0
-              ? selectedGoals.map((g) => ({
+            effectiveGoals.length > 0
+              ? effectiveGoals.map((g) => ({
                   id: g.id,
                   name: g.name,
                   targetAmount: g.targetAmount,
@@ -246,10 +258,12 @@ export default function PlannerWizard() {
     setDefaultHorizonMonths(newValues.horizonMonths);
 
     // Trade-off mengubah target/horizon secara manual → lepaskan tautan tujuan
-    // agar nilai baru (bukan agregasi tujuan) yang dipakai server.
+    // agar nilai baru (bukan agregasi tujuan) yang dipakai server. Override
+    // dikirim EKSPLISIT ke handleFormSubmit (`[]`) karena setState asinkron:
+    // tanpa ini, POST pertama masih memakai `selectedGoals` lama.
     setSelectedGoals([]);
 
-    await handleFormSubmit(newValues);
+    await handleFormSubmit(newValues, []);
   }
 
   /** Ulang seluruh alur dari awal. */
@@ -342,16 +356,17 @@ export default function PlannerWizard() {
             currentSavings={currentSavings}
             defaultTargetAmount={defaultTargetAmount}
             defaultHorizonMonths={defaultHorizonMonths}
+            goalLocked={selectedGoals.length > 0}
             onSubmit={handleFormSubmit}
             submitting={submitting}
           />
           {selectedGoals.length > 0 && (
             <p className="rounded-xl bg-accent-soft px-3.5 py-2.5 text-xs leading-relaxed text-muted">
-              Target & jangka waktu terisi dari{" "}
+              Target & jangka waktu diambil dari{" "}
               {selectedGoals.length === 1
                 ? "tujuan yang Anda pilih"
                 : `${selectedGoals.length} tujuan gabungan`}
-              . Anda masih bisa menyesuaikannya untuk skenario ini.
+              . Untuk mengubahnya, kembali ke pemilihan tujuan.
             </p>
           )}
           <button

@@ -1,7 +1,7 @@
-import Link from "next/link";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { redirect } from "next/navigation";
 import ProfileForm from "@/components/profile/ProfileForm";
+import PageBackNav from "@/components/PageBackNav";
 import EmergencyFundCard from "@/components/profile/EmergencyFundCard";
 import { getLatestProfile } from "@/lib/profileGate";
 import { getCurrentUserId } from "@/lib/auth/session";
@@ -30,13 +30,7 @@ export default async function ProfilePage() {
   return (
     <div className="min-h-dvh bg-background">
       <div className="mx-auto w-full max-w-xl px-4 py-10 sm:py-14">
-        <Link
-          href="/"
-          className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Kembali ke dashboard
-        </Link>
+        <PageBackNav />
 
         <div className="mb-6 flex flex-col gap-3">
           <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-[var(--accent)]">

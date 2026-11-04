@@ -1,7 +1,7 @@
-import Link from "next/link";
-import { ArrowLeft, LineChart } from "lucide-react";
+import { LineChart } from "lucide-react";
 import ProfileGate from "@/components/profile/ProfileGate";
 import InvestmentWizard from "@/components/investment/InvestmentWizard";
+import PageBackNav from "@/components/PageBackNav";
 
 // Dilindungi Profile_Gate yang melakukan query DB (Prisma) saat request.
 // Paksa render dinamis agar `next build` tidak melakukan query DB saat
@@ -25,13 +25,7 @@ export default function InvestmentPage() {
     <ProfileGate>
       <div className="min-h-dvh bg-background">
         <div className="mx-auto w-full max-w-xl px-4 py-10 sm:py-14">
-          <Link
-            href="/"
-            className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Kembali ke dashboard
-          </Link>
+          <PageBackNav />
 
           <div className="mb-6 flex flex-col gap-3">
             <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-[var(--accent)]">

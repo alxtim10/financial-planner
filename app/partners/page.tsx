@@ -1,6 +1,6 @@
-import Link from "next/link";
-import { ArrowLeft, Store } from "lucide-react";
+import { Store } from "lucide-react";
 import PartnerOffers from "@/components/partner/PartnerOffers";
+import PageBackNav from "@/components/PageBackNav";
 import { PARTNER_OFFERS, getPartnerOffers, type PartnerOffer } from "@/lib/partners";
 import { isInstrumentCategory } from "@/lib/investment/allocation";
 
@@ -61,13 +61,7 @@ export default async function PartnersPage({
   return (
     <div className="min-h-dvh bg-background">
       <div className="mx-auto w-full max-w-2xl px-4 py-10 sm:py-14">
-        <Link
-          href="/investment"
-          className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Kembali ke investasi
-        </Link>
+        <PageBackNav fallbackHref="/investment" />
 
         <div className="mb-6 flex flex-col gap-3 pr-16">
           <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-[var(--accent)]">
