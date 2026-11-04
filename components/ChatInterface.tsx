@@ -28,13 +28,29 @@ interface QuickPromptContext {
   hasProfile?: boolean;
 }
 
-export default function ChatInterface() {
+interface ChatInterfaceProps {
+  /**
+   * Prompt pertama yang dikirim otomatis saat komponen menerima nilai baru
+   * (mis. dari chat bar homepage lewat ChatDrawer). Dikirim sekali per nilai.
+   */
+  initialPrompt?: string | null;
+  /** Dipanggil setelah initialPrompt dikonsumsi (dikirim), agar pemanggil reset. */
+  onInitialPromptConsumed?: () => void;
+}
+
+export default function ChatInterface({
+  initialPrompt = null,
+  onInitialPromptConsumed,
+}: ChatInterfaceProps = {}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [promptContext, setPromptContext] = useState<QuickPromptContext>({});
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Jaga agar satu nilai initialPrompt hanya dikirim sekali (hindari dobel saat
+  // re-render / efek berjalan ulang).
+  const sentInitialRef = useRef<string | null>(null);
 
   // Auto-scroll ke bawah setiap kali pesan berubah (Req 2.3).
   useEffect(() => {
@@ -179,6 +195,20 @@ export default function ChatInterface() {
     e.preventDefault();
     handleSend(input);
   }
+
+  // Kirim initialPrompt otomatis sekali ketika nilainya berubah (dari entry
+  // point lain seperti chat bar homepage). Guard `sentInitialRef` mencegah
+  // pengiriman ganda bila efek berjalan ulang untuk nilai yang sama.
+  useEffect(() => {
+    const prompt = initialPrompt?.trim();
+    if (!prompt) return;
+    if (sentInitialRef.current === prompt) return;
+    if (isGenerating) return;
+    sentInitialRef.current = prompt;
+    handleSend(prompt);
+    onInitialPromptConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPrompt]);
 
   const isEmpty = messages.length === 0;
 

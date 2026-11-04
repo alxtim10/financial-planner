@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageCircle, X } from "lucide-react";
 import ChatInterface from "@/components/ChatInterface";
 import { trackClientEvent } from "@/lib/analytics/client";
+import { onOpenChat } from "@/lib/chat/openChat";
 
 /**
  * ChatDrawer membungkus <ChatInterface /> sebagai panel geser dari kanan.
@@ -34,6 +35,9 @@ export default function ChatDrawer({
   defaultOpen = false,
 }: ChatDrawerProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  // Prompt pertama yang diminta entry point lain (mis. chat bar homepage).
+  // Diteruskan ke ChatInterface untuk dikirim otomatis sekali.
+  const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const close = useCallback(() => setIsOpen(false), []);
@@ -41,6 +45,15 @@ export default function ChatDrawer({
     setIsOpen(true);
     trackClientEvent("chat_opened");
   }, []);
+
+  // Dengarkan permintaan membuka chat dari komponen lain (chat bar homepage).
+  // Bila disertai prompt, buka drawer sekaligus kirim prompt itu otomatis.
+  useEffect(() => {
+    return onOpenChat(({ prompt }) => {
+      setInitialPrompt(prompt && prompt.trim() !== "" ? prompt : null);
+      open();
+    });
+  }, [open]);
 
   // Tutup via Escape; listener dibersihkan saat unmount / saat drawer tertutup.
   useEffect(() => {
@@ -121,7 +134,10 @@ export default function ChatDrawer({
             ChatInterface sendiri sudah `h-dvh flex flex-col`; container ini
             mengurungnya dengan `h-full overflow-hidden`. */}
         <div className="h-full overflow-hidden">
-          <ChatInterface />
+          <ChatInterface
+            initialPrompt={initialPrompt}
+            onInitialPromptConsumed={() => setInitialPrompt(null)}
+          />
         </div>
       </div>
     </>
